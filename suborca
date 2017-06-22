@@ -76,8 +76,8 @@ sub_file = f"""#!/bin/zsh
 #PBS -j oe
 #PBS -e {error_file}
 #PBS -N {name}
-#PBS -r n
 
+echo "${{PBS_JOBID:r}}: {name} - $PBS_O_WORKDIR" >> $HOME/.jobs
 
 setopt EXTENDED_GLOB
 setopt NULL_GLOB
@@ -93,16 +93,27 @@ export PATH={mpi_path}:{orca_path}:$PBS_O_PATH
 export LD_LIBRARY_PATH={mpi_lib}:/opt/intel/mkl/lib/intel64:/opt/intel/lib/intel64:$LD_LIBRARY_PATH
 export RSH_COMMAND="/usr/bin/ssh -x"
 
-
-if [[ ! -d /scratch/{user} ]] then
-  mkdir -p /scratch/{user}
+# Move old output file out to output.#
+if [ -f {output} ]
+then
+    for i in {{1..1000}}
+    do
+        if [ ! -f {output}.$i ]
+        then
+            mv {output} {output}.$i
+            break
+        fi
+    done
 fi
 
+
+mkdir -p /scratch/{user}
 tdir=$(mktemp -d /scratch/{user}/{inp_root}__XXXXXX)
 export LD_LIBRARY_PATH=$tdir/orca:$LD_LIBRARY_PATH
 
-foreach node ($(sort -u $PBS_NODEFILE)) {{ ssh $node "mkdir -p $tdir" }}
-foreach node ($(sort -u $PBS_NODEFILE)) {{ ssh $node "cp -r {orca_path} $tdir/orca" }}
+foreach node ($(sort -u $PBS_NODEFILE)) {{
+    ssh $node "mkdir -p $tdir && cp -r {orca_path} $tdir/orca"
+}}
 
 # Setup for helper applications...
 # For NBO 6.0:
@@ -111,17 +122,23 @@ export GENEXE=$tdir/orca/gennbo.exe
 
 export PATH=$tdir/orca:{mpi_path}:$PATH
 
+# Function to delete unnecessary files
+cleanup () {{
+    # Delete the ORCA executable
+    foreach node ($(sort -u $PBS_NODEFILE)) {{
+        ssh $node "rm -rf $tdir/orca"
+    }}
+    # Copy the important stuff
+    cp -v ^(*.(tmp*|out|inp))  $PBS_O_WORKDIR/ >>& {output}
+    #cp -v {inp_root}.asa.inp  $PBS_O_WORKDIR/ >>& {output}
+
+    # Delete everything in the temporary directory
+    foreach node ($(sort -u $PBS_NODEFILE)) {{ ssh $node "rm -rf $tdir" }}
+}}
+
 trap '
 echo "Job terminated from outer space!" >> {output}
-# Delete the ORCA executable
-foreach node ($(sort -u $PBS_NODEFILE)) {{ ssh $node "rm -rf $tdir/orca" }}
-
-# Copy the important stuff
-cp -v ^(*.(tmp*|out|inp))  $PBS_O_WORKDIR/ >>& {output}
-cp -v {inp_root}.asa.inp  $PBS_O_WORKDIR/ >>& {output}
-
-# Delete everything in the temporary directory
-foreach node ($(sort -u $PBS_NODEFILE)) {{ ssh $node "rm -rf $tdir" }}
+cleanup
 exit
 ' TERM
 
@@ -135,25 +152,17 @@ end
 
 cd $tdir
 
-echo "! Job execution by suborca.py on ZEUS" > {output}
-echo "Job started from $PBS_O_HOST, running $(which orca) copied from {orca_path} on $(hostname) in $tdir" >> {output}
-echo "Job execution start: $(date)" >> {output}
+num_nodes=$(wc -l $PBS_NODEFILE | cut -d " " -f 1)
+echo "Start: $(date)" >> {output}
+echo "Job running on $PBS_O_HOST, running $(which orca) copied from {orca_path} on $(hostname) in $tdir" >> {output}
 echo "Shared library path: $LD_LIBRARY_PATH" >> {output}
-echo "PBS Job ID is: $PBS_JOBID" >> {output}
-cat $PBS_NODEFILE >> {output}
-#echo "Going to copy the following really necessary files: {moinp_files_array} {xyz_files_array}" >> {output}
+echo "PBS Job ID $PBS_JOBID is running on $num_nodes nodes:" >> {output}
+cat $PBS_NODEFILE | tr "\\n" ", " |  sed "s|,$|\\n|" >> {output}
+
 # = calls full path in zsh
 =orca {inp} >>& {output}
 
-# Delete the ORCA executable
-foreach node ($(sort -u $PBS_NODEFILE)) {{ ssh $node "rm -rf $tdir/orca" }}
-
-# Copy the import stuff
-cp -v ^(*.(tmp*|out|inp)) $PBS_O_WORKDIR/ >>& {output}
-cp -v {inp_root}.asa.inp $PBS_O_WORKDIR/ >>& {output}
-
-# Delete everything in the temporary directory
-foreach node ($(sort -u $PBS_NODEFILE)) {{ ssh $node "rm -rf $tdir" }}
+cleanup
 """
 
 
