@@ -1,41 +1,28 @@
 #!/usr/bin/env python3
 
-import argparse
 import os
 import re
 from subprocess import check_call
+from sq import SQParser, setup_cluster
 
-parser = argparse.ArgumentParser(description='Submit a job to run.')
-parser.add_argument('-i', '--input', help='The input file to run.', type=str,
-                    default='input.dat')
-parser.add_argument('-o', '--output', help='Where to put the output.',
-                    type=str, default='{autoselect}')
-parser.add_argument('-q', '--queue', help='What queue to use.',
-                    type=str, default='small')
-parser.add_argument('-n', '--name', help='The name of the job.', type=str,
-                    default='{autoselect}')
-parser.add_argument('-N', '--nodes', help='The number of nodes to be used.',
-                    type=int, default=1)
-parser.add_argument('-O', '--old', help="Request old version.",
+
+parser = SQParser()
+parser.add_argument('-O', '--old', help='Request old version.',
                     action='store_true', default=False)
-parser.add_argument('-d', '--debug', help="Generate but don't submit .sh script.",
-                    action='store_true', default=False)
-
-
 args = parser.parse_args()
+
+cluster = setup_cluster(args)
 
 cwd = os.getcwd()
 orca_path = '/opt/orca' if args.old else '/opt/orca_current'
 mpi_path = '/opt/openmpi_1.10.2/bin'
 mpi_lib = '/opt/openmpi_1.10.2/lib'
 
-queue = args.queue
-if queue not in ['small', 'batch']:
-    raise Exception('Invalid queue')
+queue = cluster.queue
 
 inp = args.input
 if not os.path.exists(inp):
-    raise Exception("Unable to find input file")
+    raise Exception('Unable to find input file')
 inp_root = '.'.join(inp.split('.')[:-1])
 
 output = args.output
@@ -93,7 +80,7 @@ export PATH={mpi_path}:{orca_path}:$PBS_O_PATH
 export LD_LIBRARY_PATH={mpi_lib}:/opt/intel/mkl/lib/intel64:/opt/intel/lib/intel64:$LD_LIBRARY_PATH
 export RSH_COMMAND="/usr/bin/ssh -x"
 
-# Move old output file out to output.#
+# Move old output file to output.#
 if [ -f {output} ]
 then
     for i in {{1..1000}}
@@ -139,6 +126,7 @@ cleanup () {{
 trap '
 echo "Job terminated from outer space!" >> {output}
 cleanup
+echo "${{PBS_JOBID:r}}: {name} - $PBS_O_WORKDIR" >> $HOME/.failed_jobs
 exit
 ' TERM
 
@@ -163,6 +151,9 @@ cat $PBS_NODEFILE | tr "\\n" ", " |  sed "s|,$|\\n|" >> {output}
 =orca {inp} >>& {output}
 
 cleanup
+
+
+echo "${{PBS_JOBID:r}}: {name} - $PBS_O_WORKDIR" >> $HOME/.completed_jobs
 """
 
 
