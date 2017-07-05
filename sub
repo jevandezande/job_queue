@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+
+from submitjob import SubmitJob as SJ
+
+sj = SJ()
+sj.submit()

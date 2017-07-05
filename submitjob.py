@@ -6,7 +6,7 @@ import re
 import subprocess
 
 
-class SQ:
+class SubmitJob:
     def __init__(self):
         self.parse_args()
         self.cwd = os.getcwd()
@@ -24,7 +24,7 @@ class SQ:
         """
         parser = argparse.ArgumentParser(description='Get the geometry from an output file.')
         parser.add_argument('-p', '--program', help='The program to run.', type=str,
-                            default='orca')
+                            default='orca', choices={'orca', 'orca_old'})
         parser.add_argument('-i', '--input', help='The input file to run.', type=str,
                             default='input.dat')
         parser.add_argument('-o', '--output', help='Where to put the output.',
@@ -149,18 +149,20 @@ ulimit -u 8191
 # Done here as the generation script is not always called
 if [ -f {self.output} ]
 then
-    for i in {{1..1000}}
-    do
+    for i in {{1..1000}};
+    {{
         if [ ! -f {self.output}.$i ]
         then
             mv {self.output} {self.output}.$i
             break
         fi
-    done
+    }}
 fi
 
 mkdir -p /scratch/{self.user}
 tdir=$(mktemp -d /scratch/{self.user}/{self.input_root}__XXXXXX)
+
+nodes=$(sort -u $PBS_NODEFILE)
 """
         if self.program in ['orca', 'orca_old']:
             orca_path = '/opt/orca' if self.program == 'orca_old' else '/opt/orca_current'
@@ -178,7 +180,8 @@ export PATH={mpi_path}:{orca_path}:$PBS_O_PATH
 
 export LD_LIBRARY_PATH=$tdir/orca:{mpi_lib}:/opt/intel/mkl/lib/intel64:/opt/intel/lib/intel64:$LD_LIBRARY_PATH
 
-for node in $(sort -u $PBS_NODEFILE) {{
+for node in $nodes;
+{{
     ssh $node "mkdir -p $tdir && cp -r {orca_path} $tdir/orca"
 }}
 
@@ -193,34 +196,29 @@ export PATH=$tdir/orca:{mpi_path}:$PATH
 
 # Function to delete unnecessary files
 cleanup () {{
-    # Delete the ORCA executable
-    foreach node ($(sort -u $PBS_NODEFILE)) {{
-        ssh $node "rm -rf $tdir/orca"
-    }}
     # Copy the important stuff
-    cp -v ^(*.(tmp*|out|inp))  $PBS_O_WORKDIR/ >>& {self.output}
-    #cp -v {self.input_root}.asa.inp  $PBS_O_WORKDIR/ >>& {self.output}
+    cp -v ^(*.(tmp*|out|inp)) $PBS_O_WORKDIR/ 1>> {self.output} 2> /dev/null
 
     # Delete everything in the temporary directory
-    foreach node ($(sort -u $PBS_NODEFILE)) {{ ssh $node "rm -rf $tdir" }}
+    for node in $nodes; {{ ssh $node "rm -rf $tdir" }}
 }}
 
 
 cp $PBS_O_WORKDIR/{self.input_root}.* $tdir/
 
 cd $PBS_O_WORKDIR
-foreach file ({moinp_files_array} {xyz_files_array} *.pc *.opt *.hess *.rrhess *.bas *.pot *.rno *.LJ *.LJ.Excl)
-cp -v $file $tdir/ >>& {self.output}
-end
+for file in {moinp_files_array} {xyz_files_array} *.pc *.opt *.hess *.rrhess *.bas *.pot *.rno *.LJ *.LJ.Excl;
+{{
+    cp -v $file $tdir/ >>& {self.output}
+}}
 
 cd $tdir
 
-num_nodes=$(wc -l $PBS_NODEFILE | cut -d " " -f 1)
-echo "Start: $(date)" >> {self.output}
-echo "Job running on $PBS_O_HOST, running $(which orca) copied from {orca_path} on $(hostname) in $tdir" >> {self.output}
-echo "Shared library path: $LD_LIBRARY_PATH" >> {self.output}
-echo "PBS Job ID $PBS_JOBID is running on $num_nodes nodes:" >> {self.output}
-cat $PBS_NODEFILE | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
+echo "Start: $(date)
+Job running on $PBS_O_HOST, running $(which orca) copied from {orca_path} on $(hostname) in $tdir
+Shared library path: $LD_LIBRARY_PATH
+PBS Job ID $PBS_JOBID is running on $(echo $a | wc -l) nodes:" >> {self.output}
+echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 # = calls full path in zsh
 =orca {self.input} >>& {self.output}
@@ -238,8 +236,3 @@ cleanup
 
         if not self.debug:
             subprocess.check_call(f'qsub {qsubopt} {self.input_root}.zsh', shell=True)
-
-
-if __name__ == '__main__':
-    sq = SQ()
-    sq.submit()
