@@ -4,6 +4,7 @@ import os
 import argparse
 import re
 import subprocess
+import math
 
 
 class SubmitJob:
@@ -16,7 +17,7 @@ class SubmitJob:
         self.select_input()
         self.select_output()
         self.name_job()
-        self.select_nprocs()
+        self.select_resources()
 
     def parse_args(self):
         """
@@ -96,22 +97,30 @@ class SubmitJob:
         if self.name.isdigit():
             self.name = 'J' + self.name
 
-    def select_nprocs(self):
+    def select_resources(self):
         """
         Set the number of processors to that in input file, else 1
         TODO: integrate with number of nodes flag
+        Set the memory
         """
         self.nprocs = 1
+        self.memory = 1 # GB
 
         if self.program in ['orca', 'orca_old']:
             nprocs_re = r'%\s*pal\n?\s*nprocs\s+(\d+)\n?\s*end'
+            maxcore_re = r'%\s*maxcore\s*(\d+)'
             with open(self.input) as f:
-                res = re.search(nprocs_re, f.read())
-            self.nprocs = int(res.group(1)) if res else 1
+                inp_file = f.read()
+            nprocs = re.search(nprocs_re, inp_file)
+            maxcore = re.search(maxcore_re, inp_file)
+            self.nprocs = int(nprocs.group(1)) if nprocs else 1
+            core_memory = int(maxcore.group(1))/1024 if maxcore else 1
+            self.memory = math.ceil(core_memory * self.nprocs)
 
         if self.nprocs % self.nodes:
             raise Exception(f'Cannot divide {self.nprocs} processes evenly between {self.nodes} nodes.')
         self.ppn = int(self.nprocs/self.nodes)
+
 
     def submit(self):
         """
@@ -129,6 +138,7 @@ exit
         sub_file = f"""#!/bin/zsh
 #PBS -S /bin/zsh
 #PBS -l nodes={self.nodes}:ppn={self.ppn}
+#PBS -l mem={self.memory}GB
 #PBS -l walltime=8760:00:00
 #PBS -q {self.queue}
 #PBS -j oe
