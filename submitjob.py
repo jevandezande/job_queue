@@ -93,9 +93,6 @@ class SubmitJob:
         If not defined, name the job after the directory
         """
         self.name = self.cwd.split('/')[-1] if self.name == '{autoselect}' else self.name
-        # Job name can't start with a number
-        if self.name.isdigit():
-            self.name = 'J' + self.name
 
     def select_resources(self):
         """
