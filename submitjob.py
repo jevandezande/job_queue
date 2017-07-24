@@ -214,7 +214,7 @@ cleanup () {{
 cp $PBS_O_WORKDIR/{self.input_root}.* $tdir/
 
 cd $PBS_O_WORKDIR
-for file in {moinp_files_array} {xyz_files_array} *.pc *.opt *.hess *.rrhess *.bas *.pot *.rno *.LJ *.LJ.Excl;
+for file in {moinp_files_array} {xyz_files_array} *.gbw *.pc *.opt *.hess *.rrhess *.bas *.pot *.rno *.LJ *.LJ.Excl;
 {{
     cp -v $file $tdir/ >>& {self.output}
 }}
