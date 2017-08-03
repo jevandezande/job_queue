@@ -8,8 +8,12 @@ import math
 
 
 class SubmitJob:
-    def __init__(self):
-        self.parse_args()
+    def __init__(self, options=None):
+        self.supported_programs = ['orca', 'orca_old', 'nbo']
+        if options is not None:
+            self.parse_options(options)
+        else:
+            self.parse_args()
         self.cwd = os.getcwd()
         self.get_host()
         self.get_user()
@@ -19,13 +23,35 @@ class SubmitJob:
         self.name_job()
         self.select_resources()
 
+    def parse_options(self, options):
+        """
+        Parse the options passed in, currently trusts all options
+        """
+        default_options = {
+            'program': 'orca',
+            'input': 'input.dat',
+            'output': '{autoselect}',
+            'queue': 'small',
+            'nodes': 1,
+            'name': '{autoselect}',
+            'debug': False,
+        }
+
+        for o in default_options:
+            if o in options:
+                default_options[o] = options[o]
+                del options[o]
+        if options:
+            raise Exception(f'Unsupported options passed to SubmitJob: {options}')
+            
+
     def parse_args(self):
         """
         Parse the command line arguments
         """
         parser = argparse.ArgumentParser(description='Get the geometry from an output file.')
         parser.add_argument('-p', '--program', help='The program to run.', type=str,
-                            default='orca', choices={'orca', 'orca_old'})
+                            default='orca', choices=self.supported_programs)
         parser.add_argument('-i', '--input', help='The input file to run.', type=str,
                             default='input.dat')
         parser.add_argument('-o', '--output', help='Where to put the output.',
@@ -90,9 +116,13 @@ class SubmitJob:
 
     def name_job(self):
         """
-        If not defined, name the job after the directory
+        If not defined, name the job after the directory, if short, use two directories
         """
-        self.name = self.cwd.split('/')[-1] if self.name == '{autoselect}' else self.name
+        if self.name == '{autoselect}':
+            dirs = self.cwd.split('/')
+            self.name = dirs[-1]
+            if len(self.name) < 10 and len(dirs[-2]) < 10:
+                self.name = dirs[-2] + '/' + dirs[-1]
 
     def select_resources(self):
         """
@@ -101,7 +131,7 @@ class SubmitJob:
         Set the memory
         """
         self.nprocs = 1
-        self.memory = 1 # GB
+        self.memory = 10 # GB
 
         if self.program in ['orca', 'orca_old']:
             nprocs_re = r'%\s*pal\n?\s*nprocs\s+(\d+)\n?\s*end'
@@ -123,8 +153,9 @@ class SubmitJob:
         """
         Generate and submit the subfile
         """
+        qsubopt = ''
         error_file = 'error'
-        trap = """trap '
+        trap = f"""trap '
 echo "Job terminated from outer space!" >> {self.output}
 cleanup
 echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.failed_jobs
@@ -177,7 +208,6 @@ nodes=$(sort -u $PBS_NODEFILE)
             mpi_lib = '/opt/openmpi_1.10.2/lib'
 
             # TODO: remove hardcoded options
-            qsubopt = ''
             moinp_files_array = ''
             xyz_files_array = ''
             self.nodes = 1
@@ -232,9 +262,25 @@ echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 cleanup
 """
+        elif self.program == 'nbo':
+            sub_file += f"""
+{trap}
 
+# For NBO 6.0:
+export NBOEXE=$tdir/orca/nbo6.exe
+export GENEXE=$tdir/orca/gennbo.exe
+
+cp $PBS_O_WORKDIR/{self.input_root}.* $tdir/
+cd $tdir
+echo "Start: $(date)
+Job running on $PBS_O_HOST, running $(which gennbo.exe) on $(hostname) in $tdir
+PBS Job ID $PBS_JOBID is running on $(echo $a | wc -l) nodes:" >> {self.output}
+echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
+
+gennbo.exe < {self.input} > {self.output}
+"""
         else:
-            raise AttributeError('Only orca currently supported.')
+            raise AttributeError(f'Only {self.supported_programs} currently supported.')
 
         sub_file += f"""echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.completed_jobs"""
 
