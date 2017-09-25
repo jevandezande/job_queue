@@ -35,15 +35,15 @@ class SubmitJob:
             'nodes': 1,
             'name': '{autoselect}',
             'debug': False,
+            'job_array': False,
         }
 
-        for o in default_options:
-            if o in options:
-                default_options[o] = options[o]
-                del options[o]
-        if options:
+        if any(k not in default_options for k in options):
             raise Exception(f'Unsupported options passed to SubmitJob: {options}')
-            
+
+        self.__dict__.update(default_options)
+        self.__dict__.update(options)
+
 
     def parse_args(self):
         """
@@ -64,6 +64,8 @@ class SubmitJob:
                             default='{autoselect}')
         parser.add_argument('-d', '--debug', help='Generate but don\'t submit .sh script.',
                             action='store_true', default=False)
+        parser.add_argument('-a', '--job_array', help='Submit as a job array',
+                            type=int, default=False)
         self.__dict__.update(parser.parse_args().__dict__)
 
     def get_host(self):
@@ -101,7 +103,13 @@ class SubmitJob:
         """
         Select the appropriate input file
         """
-        if not os.path.exists(self.input):
+        if self.job_array:
+            for i in range(self.job_array):
+                if not os.path.isfile(f'{i}/{self.input}'):
+                    print(f'{i}/{self.input}')
+                    print(os.getcwd())
+                    raise Exception(f'Unable to find job_array input file, {i}.')
+        elif not os.path.exists(self.input):
             raise Exception('Unable to find input file')
         self.input_root = '.'.join(self.input.split('.')[:-1])
 
@@ -112,17 +120,19 @@ class SubmitJob:
         if self.output == '{autoselect}':
             self.output = 'output.dat' if self.input == 'input.dat' else self.input_root + '.out'
         # make full path
-        self.output = f'$PBS_O_WORKDIR/{self.output}'
+        self.output = f'$PBS_O_WORKDIR/$PBS_ARRAYID/{self.output}'
 
     def name_job(self):
         """
-        If not defined, name the job after the directory, if short, use two directories
+        If not defined, name the job after the path to it (up to 20 chars long)
         """
         if self.name == '{autoselect}':
-            dirs = self.cwd.split('/')
-            self.name = dirs[-1]
-            if len(self.name) < 10 and len(dirs[-2]) < 10:
-                self.name = dirs[-2] + '/' + dirs[-1]
+            try:
+                path = self.cwd[-20:]
+                self.name = path[path.index('/') + 1:]
+            except (ValueError, IndexError) as e:
+                dirs = self.cwd.split('/')
+                self.name = dirs[-1]
 
     def select_resources(self):
         """
@@ -133,7 +143,7 @@ class SubmitJob:
         self.nprocs = 1
         self.memory = 10 # GB
 
-        if self.program in ['orca', 'orca_old']:
+        if self.program in ['orca', 'orca_old'] and not self.job_array:
             nprocs_re = r'%\s*pal\n?\s*nprocs\s+(\d+)\n?\s*end'
             maxcore_re = r'%\s*maxcore\s*(\d+)'
             with open(self.input) as f:
@@ -155,6 +165,7 @@ class SubmitJob:
         """
         qsubopt = ''
         error_file = 'error'
+        job_array_str = f'#PBS -t 0-{self.job_array-1}' if self.job_array else ''
         trap = f"""trap '
 echo "Job terminated from outer space!" >> {self.output}
 cleanup
@@ -172,8 +183,12 @@ exit
 #PBS -j oe
 #PBS -e {error_file}
 #PBS -N {self.name}
+{job_array_str}
 
-echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.jobs
+if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
+then
+    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.jobs
+fi
 setopt EXTENDED_GLOB
 setopt NULL_GLOB
 export MKL_NUM_THREADS=1
@@ -234,6 +249,7 @@ export PATH=$tdir/orca:{mpi_path}:$PATH
 # Function to delete unnecessary files
 cleanup () {{
     # Copy the important stuff
+    rm *.proc* 2> /dev/null
     cp -v ^(*.(tmp*|out|inp)) $PBS_O_WORKDIR/ 1>> {self.output} 2> /dev/null
 
     # Delete everything in the temporary directory
@@ -241,9 +257,9 @@ cleanup () {{
 }}
 
 
-cp $PBS_O_WORKDIR/{self.input_root}.* $tdir/
+cp $PBS_O_WORKDIR/$PBS_ARRAYID/{self.input_root}.* $tdir/
 
-cd $PBS_O_WORKDIR
+cd $PBS_O_WORKDIR/$PBS_ARRAYID/
 for file in {moinp_files_array} {xyz_files_array} *.gbw *.pc *.opt *.hess *.rrhess *.bas *.pot *.rno *.LJ *.LJ.Excl;
 {{
     cp -v $file $tdir/ >>& {self.output}
@@ -270,7 +286,7 @@ cleanup
 export NBOEXE=$tdir/orca/nbo6.exe
 export GENEXE=$tdir/orca/gennbo.exe
 
-cp $PBS_O_WORKDIR/{self.input_root}.* $tdir/
+cp $PBS_O_WORKDIR/$PBS_ARRAYID/{self.input_root}.* $tdir/
 cd $tdir
 echo "Start: $(date)
 Job running on $PBS_O_HOST, running $(which gennbo.exe) on $(hostname) in $tdir
@@ -282,7 +298,11 @@ gennbo.exe < {self.input} > {self.output}
         else:
             raise AttributeError(f'Only {self.supported_programs} currently supported.')
 
-        sub_file += f"""echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.completed_jobs"""
+        sub_file += f"""
+if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
+then
+    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.completed_jobs
+fi"""
 
         with open(f'{self.input_root}.zsh', 'w') as f:
             f.write(sub_file)
