@@ -226,7 +226,6 @@ nodes=$(sort -u $PBS_NODEFILE)
             moinp_files_array = ''
             xyz_files_array = ''
             self.nodes = 1
-            self.ppn = 8
             sub_file += f"""
 export PATH={mpi_path}:{orca_path}:$PBS_O_PATH
 
@@ -250,7 +249,10 @@ export PATH=$tdir/orca:{mpi_path}:$PATH
 cleanup () {{
     # Copy the important stuff
     rm *.proc* 2> /dev/null
-    cp -v ^(*.(tmp*|out|inp)) $PBS_O_WORKDIR/ 1>> {self.output} 2> /dev/null
+    tar_name=JOB_$PBS_JOBID$PBS_ARRAYID
+    mkdir $tar_name
+    cp ^(*.(tmp*|out|inp|hostnames)) $tar_name
+    tar cvzf $PBS_O_WORKDIR/$PBS_ARRAYID/$tar_name.tgz $tar_name
 
     # Delete everything in the temporary directory
     for node in $nodes; {{ ssh $node "rm -rf $tdir" }}
