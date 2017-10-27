@@ -44,7 +44,6 @@ class SubmitJob:
         self.__dict__.update(default_options)
         self.__dict__.update(options)
 
-
     def parse_args(self):
         """
         Parse the command line arguments
@@ -68,6 +67,12 @@ class SubmitJob:
                             type=int, default=False)
         self.__dict__.update(parser.parse_args().__dict__)
 
+    def parse_config(self):
+        """
+        Parse the config file
+        """
+        pass
+
     def get_host(self):
         """
         Determine where this is running
@@ -75,6 +80,8 @@ class SubmitJob:
         hostname = gethostname()
         if hostname in ['zeusln1', 'zeusln2']:
             self.host = 'zeus'
+        elif hostname in ['master1', 'master2']:
+            self.host = 'hera'
         else:
             raise AttributeError(f'No suitable host found for hostname {hostname}')
 
@@ -91,13 +98,13 @@ class SubmitJob:
         Check to make sure the queue is invalid
         """
         queues = {
-            'zeus' : ['small', 'batch'],
+            'zeus': ['small', 'batch'],
+            'hera': ['small', 'batch'],
         }
         if self.queue in queues[self.host]:
             return True
         else:
-            raise AttributeError(f'No queue named {queue} on {self.host}')
-
+            raise AttributeError(f'No queue named {self.queue} on {self.host}')
 
     def select_input(self):
         """
@@ -141,7 +148,7 @@ class SubmitJob:
         Set the memory
         """
         self.nprocs = 1
-        self.memory = 10 # GB
+        self.memory = 10  # GB
 
         if self.program in ['orca', 'orca_old'] and not self.job_array:
             nprocs_re = r'%\s*pal\n?\s*nprocs\s+(\d+)\n?\s*end'
@@ -157,7 +164,6 @@ class SubmitJob:
         if self.nprocs % self.nodes:
             raise Exception(f'Cannot divide {self.nprocs} processes evenly between {self.nodes} nodes.')
         self.ppn = int(self.nprocs/self.nodes)
-
 
     def submit(self):
         """
@@ -249,10 +255,9 @@ export PATH=$tdir/orca:{mpi_path}:$PATH
 cleanup () {{
     # Copy the important stuff
     rm *.proc* 2> /dev/null
-    tar_name=JOB_$PBS_JOBID$PBS_ARRAYID
-    mkdir $tar_name
-    cp ^(*.(tmp*|out|inp|hostnames)) $tar_name
-    tar cvzf $PBS_O_WORKDIR/$PBS_ARRAYID/$tar_name.tgz $tar_name
+    mkdir data/
+    cp ^(*.(tmp*|out|inp|hostnames)) data/
+    tar cvzf $PBS_O_WORKDIR/$PBS_ARRAYID/data.tgz data/
 
     # Delete everything in the temporary directory
     for node in $nodes; {{ ssh $node "rm -rf $tdir" }}
