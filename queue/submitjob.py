@@ -36,6 +36,7 @@ class SubmitJob:
             'name': '{autoselect}',
             'debug': False,
             'job_array': False,
+            'walltime': 8760,
         }
 
         if any(k not in default_options for k in options):
@@ -49,22 +50,24 @@ class SubmitJob:
         Parse the command line arguments
         """
         parser = argparse.ArgumentParser(description='Get the geometry from an output file.')
-        parser.add_argument('-p', '--program', help='The program to run.', type=str,
-                            default='orca', choices=self.supported_programs)
-        parser.add_argument('-i', '--input', help='The input file to run.', type=str,
-                            default='input.dat')
+        parser.add_argument('-p', '--program', help='The program to run.',
+                            type=str, default='orca', choices=self.supported_programs)
+        parser.add_argument('-i', '--input', help='The input file to run.',
+                            type=str, default='input.dat')
         parser.add_argument('-o', '--output', help='Where to put the output.',
                             type=str, default='{autoselect}')
         parser.add_argument('-q', '--queue', help='What queue to use.',
                             type=str, default='small')
         parser.add_argument('-n', '--nodes', help='The number of nodes to be used.',
                             type=int, default=1)
-        parser.add_argument('-N', '--name', help='The name of the job.', type=str,
-                            default='{autoselect}')
+        parser.add_argument('-N', '--name', help='The name of the job.',
+                            type=str, default='{autoselect}')
         parser.add_argument('-d', '--debug', help='Generate but don\'t submit .sh script.',
                             action='store_true', default=False)
         parser.add_argument('-a', '--job_array', help='Submit as a job array',
                             type=int, default=False)
+        parser.add_argument('-t', '--walltime', help='Max walltime of job',
+                            type=int, default=8760)
         self.__dict__.update(parser.parse_args().__dict__)
 
     def parse_config(self):
@@ -175,7 +178,7 @@ class SubmitJob:
         trap = f"""trap '
 echo "Job terminated from outer space!" >> {self.output}
 cleanup
-echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.failed_jobs
+echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.queue/failed
 exit
 ' TERM
 """
@@ -184,7 +187,7 @@ exit
 #PBS -S /bin/zsh
 #PBS -l nodes={self.nodes}:ppn={self.ppn}
 #PBS -l mem={self.memory}GB
-#PBS -l walltime=8760:00:00
+#PBS -l walltime={self.walltime}:00:00
 #PBS -q {self.queue}
 #PBS -j oe
 #PBS -e {error_file}
@@ -193,7 +196,7 @@ exit
 
 if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
 then
-    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.jobs
+    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.queue/submitted
 fi
 setopt EXTENDED_GLOB
 setopt NULL_GLOB
@@ -308,7 +311,7 @@ gennbo.exe < {self.input} > {self.output}
         sub_file += f"""
 if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
 then
-    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.completed_jobs
+    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.queue/completed
 fi"""
 
         with open(f'{self.input_root}.zsh', 'w') as f:

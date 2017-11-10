@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from sq import SubmitJob as SJ
+from queue import SubmitJob as SJ
 
 sj = SJ()
 sj.submit()
