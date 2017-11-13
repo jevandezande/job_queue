@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+
+# Script prints out the queues in a nice format
+import os
+import sys
+import time
+import argparse
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from queue.queues import Queues
+
+parser = argparse.ArgumentParser(description='Get the final energy of an output file.')
+parser.add_argument('-n', '--number', help='The number of jobs to be output.',
+                    type=int, default=50)
+parser.add_argument('-u', '--user', help="Output only the jobs of the current user.",
+                    action='store_true', default=False)
+parser.add_argument('-p', '--person', help='Output only the specified persons jobs',
+                    action='store', default=False)
+parser.add_argument('-w', '--watch', help='Update when jobs change.',
+                    action='store_true', default=False)
+
+args = parser.parse_args()
+
+queues = Queues()
+person = args.person if args.person else args.user
+out = queues.print(numjobs=args.number, person=person)
+print(out)
+
+if args.watch:
+    for i in range(3600):
+        # Check every second
+        time.sleep(1)
+        new_queues = Queues()
+        if queues != new_queues:
+            queues = new_queues
+            print(queues.print(numjobs=args.number, person=person))
