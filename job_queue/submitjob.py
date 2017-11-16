@@ -178,7 +178,7 @@ class SubmitJob:
         trap = f"""trap '
 echo "Job terminated from outer space!" >> {self.output}
 cleanup
-echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.queue/failed
+echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.job_queue/failed
 exit
 ' TERM
 """
@@ -196,7 +196,7 @@ exit
 
 if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
 then
-    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.queue/submitted
+    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.job_queue/submitted
 fi
 setopt EXTENDED_GLOB
 setopt NULL_GLOB
@@ -311,7 +311,7 @@ gennbo.exe < {self.input} > {self.output}
         sub_file += f"""
 if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
 then
-    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.queue/completed
+    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.job_queue/completed
 fi"""
 
         with open(f'{self.input_root}.zsh', 'w') as f:

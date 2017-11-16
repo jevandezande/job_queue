@@ -4,7 +4,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from queue import SubmitJob as SJ
+from job_queue import SubmitJob as SJ
 
 sj = SJ()
 sj.submit()

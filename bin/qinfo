@@ -8,7 +8,7 @@ import argparse
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from queue.queues import Queues
+from job_queue.queues import Queues
 
 parser = argparse.ArgumentParser(description='Get the final energy of an output file.')
 parser.add_argument('-n', '--number', help='The number of jobs to be output.',
