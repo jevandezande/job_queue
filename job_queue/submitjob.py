@@ -1,15 +1,16 @@
-from socket import gethostname
-import getpass
 import os
-import argparse
 import re
-import subprocess
 import math
+import getpass
+import argparse
+import subprocess
+
+from socket import gethostname
 
 
 class SubmitJob:
     def __init__(self, options=None):
-        self.supported_programs = ['orca', 'orca_old', 'nbo']
+        self.supported_programs = ['orca', 'orca_old', 'nbo', 'orca3', 'cfour']
         if options is not None:
             self.parse_options(options)
         else:
@@ -22,6 +23,15 @@ class SubmitJob:
         self.select_output()
         self.name_job()
         self.select_resources()
+        self.select_important_files()
+
+    def check_options(self, options):
+        """
+        Checks that options are valid.
+        WARNING: this is not an exhaustive check, instead it is merely a sanity
+        check for a few options
+        """
+        pass
 
     def parse_options(self, options):
         """
@@ -29,7 +39,7 @@ class SubmitJob:
         """
         default_options = {
             'program': 'orca',
-            'input': 'input.dat',
+            'input': '{autoselect}',
             'output': '{autoselect}',
             'queue': 'small',
             'nodes': 1,
@@ -42,8 +52,11 @@ class SubmitJob:
         if any(k not in default_options for k in options):
             raise Exception(f'Unsupported options passed to SubmitJob: {options}')
 
-        self.__dict__.update(default_options)
-        self.__dict__.update(options)
+        my_options = default_options
+        my_options.update(options)
+        self.check_options(my_options)
+
+        self.__dict__.update(my_options)
 
     def parse_args(self):
         """
@@ -53,7 +66,7 @@ class SubmitJob:
         parser.add_argument('-p', '--program', help='The program to run.',
                             type=str, default='orca', choices=self.supported_programs)
         parser.add_argument('-i', '--input', help='The input file to run.',
-                            type=str, default='input.dat')
+                            type=str, default='{autoselect}')
         parser.add_argument('-o', '--output', help='Where to put the output.',
                             type=str, default='{autoselect}')
         parser.add_argument('-q', '--queue', help='What queue to use.',
@@ -68,7 +81,10 @@ class SubmitJob:
                             type=int, default=False)
         parser.add_argument('-t', '--walltime', help='Max walltime of job',
                             type=int, default=8760)
-        self.__dict__.update(parser.parse_args().__dict__)
+        options = parser.parse_args().__dict__
+        self.check_options(options)
+
+        self.__dict__.update(options)
 
     def parse_config(self):
         """
@@ -113,6 +129,15 @@ class SubmitJob:
         """
         Select the appropriate input file
         """
+        # Select the input file name if not specified
+        if self.input == '{autoselect}':
+            if self.program == 'cfour':
+                self.input = 'ZMAT'
+            elif self.program == 'gamess':
+                self.input = 'input.inp'
+            else:
+                self.input = 'input.dat'
+
         if self.job_array:
             for i in range(self.job_array):
                 if not os.path.isfile(f'{i}/{self.input}'):
@@ -128,7 +153,10 @@ class SubmitJob:
         Select the appropriate output file
         """
         if self.output == '{autoselect}':
-            self.output = 'output.dat' if self.input == 'input.dat' else self.input_root + '.out'
+            if self.input in ['input.dat', 'ZMAT']:
+                self.output = 'output.dat'
+            else:
+                self.input_root + '.out'
         # make full path
         self.output = f'$PBS_O_WORKDIR/$PBS_ARRAYID/{self.output}'
 
@@ -153,7 +181,7 @@ class SubmitJob:
         self.nprocs = 1
         self.memory = 10  # GB
 
-        if self.program in ['orca', 'orca_old'] and not self.job_array:
+        if 'orca' in self.program and not self.job_array:
             nprocs_re = r'%\s*pal\n?\s*nprocs\s+(\d+)\n?\s*end'
             maxcore_re = r'%\s*maxcore\s*(\d+)'
             with open(self.input) as f:
@@ -168,6 +196,18 @@ class SubmitJob:
             raise Exception(f'Cannot divide {self.nprocs} processes evenly between {self.nodes} nodes.')
         self.ppn = int(self.nprocs/self.nodes)
 
+    def select_important_files(self):
+        """
+        Selects the files to be copied back after a job is run.
+        Utilizes ZSH syntax (literally pasted into a for loop)
+        """
+        if 'orca' in self.program:
+            self.important_files = '^(*.(tmp*|out|inp|hostnames))'
+        elif self.program == 'cfour':
+            self.important_files = 'ZMATnew FCMINT FCM ANH'
+        else:
+            print("Don't know what files to copy back")
+
     def submit(self):
         """
         Generate and submit the subfile
@@ -175,13 +215,31 @@ class SubmitJob:
         qsubopt = ''
         error_file = 'error'
         job_array_str = f'#PBS -t 0-{self.job_array-1}' if self.job_array else ''
-        trap = f"""trap '
-echo "Job terminated from outer space!" >> {self.output}
+        cleanup = f'''
+# Function to delete unnecessary files
+cleanup () {{
+    # Copy the important stuff
+    rm *.proc* 2> /dev/null
+    mkdir data/
+    for file in {self.important_files};
+    {{
+        cp $file data/
+    }}
+    tar cvzf $PBS_O_WORKDIR/$PBS_ARRAYID/data.tgz data/
+
+    # Delete everything in the temporary directory
+    for node in $nodes; {{ ssh $node "rm -rf $tdir" }}
+}}
+'''
+        trap = '''
+# Calls cleanup if the world falls apart
+trap '
+"Job terminated from outer space!" >> {self.output}
 cleanup
 echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.job_queue/failed
 exit
 ' TERM
-"""
+'''
 
         sub_file = f"""#!/bin/zsh
 #PBS -S /bin/zsh
@@ -226,8 +284,13 @@ tdir=$(mktemp -d /scratch/{self.user}/{self.input_root}__XXXXXX)
 
 nodes=$(sort -u $PBS_NODEFILE)
 """
-        if self.program in ['orca', 'orca_old']:
-            orca_path = '/opt/orca' if self.program == 'orca_old' else '/opt/orca_current'
+        if 'orca' in self.program:
+            orca_paths = {
+                'orca_old': '/opt/orca',
+                'orca':     '/opt/orca_current',
+                'orca3':    '/home1/vandezande/progs/orca_3',
+            }
+            orca_path = orca_paths[self.program]
             mpi_path = '/opt/openmpi_1.10.2/bin'
             mpi_lib = '/opt/openmpi_1.10.2/lib'
 
@@ -236,7 +299,8 @@ nodes=$(sort -u $PBS_NODEFILE)
             xyz_files_array = ''
             self.nodes = 1
             sub_file += f"""
-export PATH={mpi_path}:{orca_path}:$PBS_O_PATH
+
+export PATH=$tdir/orca:{mpi_path}:{orca_path}:$PBS_O_PATH
 
 export LD_LIBRARY_PATH=$tdir/orca:{mpi_lib}:/opt/intel/mkl/lib/intel64:/opt/intel/lib/intel64:$LD_LIBRARY_PATH
 
@@ -245,34 +309,17 @@ for node in $nodes;
     ssh $node "mkdir -p $tdir && cp -r {orca_path} $tdir/orca"
 }}
 
-{trap}
-
 # Setup for helper applications...
 # For NBO 6.0:
 export NBOEXE=$tdir/orca/nbo6.exe
 export GENEXE=$tdir/orca/gennbo.exe
 
-export PATH=$tdir/orca:{mpi_path}:$PATH
-
-# Function to delete unnecessary files
-cleanup () {{
-    # Copy the important stuff
-    rm *.proc* 2> /dev/null
-    mkdir data/
-    cp ^(*.(tmp*|out|inp|hostnames)) data/
-    tar cvzf $PBS_O_WORKDIR/$PBS_ARRAYID/data.tgz data/
-
-    # Delete everything in the temporary directory
-    for node in $nodes; {{ ssh $node "rm -rf $tdir" }}
-}}
-
-
-cp $PBS_O_WORKDIR/$PBS_ARRAYID/{self.input_root}.* $tdir/
+cp $PBS_O_WORKDIR/$PBS_ARRAYID/{self.input_root}.* $tdir
 
 cd $PBS_O_WORKDIR/$PBS_ARRAYID/
 for file in {moinp_files_array} {xyz_files_array} *.gbw *.pc *.opt *.hess *.rrhess *.bas *.pot *.rno *.LJ *.LJ.Excl;
 {{
-    cp -v $file $tdir/ >>& {self.output}
+    cp -v $file $tdir >>& {self.output}
 }}
 
 cd $tdir
@@ -285,13 +332,10 @@ echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 # = calls full path in zsh
 =orca {self.input} >>& {self.output}
-
-cleanup
 """
+
         elif self.program == 'nbo':
             sub_file += f"""
-{trap}
-
 # For NBO 6.0:
 export NBOEXE=$tdir/orca/nbo6.exe
 export GENEXE=$tdir/orca/gennbo.exe
@@ -305,17 +349,66 @@ echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 gennbo.exe < {self.input} > {self.output}
 """
+
+        elif self.program == 'cfour':
+            cfour_path = '/home1/vandezande/.install/cfour'
+            inp_files = ''
+            start_dir = '$PBS_O_WORKDIR/$PBS_ARRAYID/'
+            sub_file += f"""
+##################
+# CFour specific #
+##################
+PATH=$PATH:{cfour_path}/bin
+
+# Copy everything
+cd {start_dir}
+if [ ! -e GENBAS ]
+then
+    echo "Using default GENBAS" >> {self.output}
+    cp {cfour_path}/basis/GENBAS $tdir
+fi
+
+for file in ZMAT FCM FCMINT {inp_files}
+{{
+    cp -v $file $tdir >>& {self.output}
+}}
+
+cd $tdir
+{cleanup}
+{trap}
+
+###############
+# Run the job #
+###############
+
+echo "Start: $(date)
+Job running on $PBS_O_HOST, running $(which xcfour) on $(hostname) in $tdir
+PBS Job ID $PBS_JOBID is running on $(echo $a | wc -l) nodes:" >> {self.output}
+echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
+
+xcfour {self.input} >>& {self.output}
+
+echo "Finished"
+"""
+
         else:
             raise AttributeError(f'Only {self.supported_programs} currently supported.')
 
         sub_file += f"""
+###########
+# Cleanup #
+###########
+cleanup
+
+# At job to log of completed jobs
 if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
 then
     echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.job_queue/completed
 fi"""
 
-        with open(f'{self.input_root}.zsh', 'w') as f:
+        self.sub_script_name = 'job.zsh'
+        with open(self.sub_script_name, 'w') as f:
             f.write(sub_file)
 
         if not self.debug:
-            subprocess.check_call(f'qsub {qsubopt} {self.input_root}.zsh', shell=True)
+            subprocess.check_call(f'qsub {qsubopt} {self.sub_script_name}', shell=True)
