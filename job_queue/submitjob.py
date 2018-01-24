@@ -7,10 +7,14 @@ import subprocess
 
 from socket import gethostname
 
+from configparser import ConfigParser
+
 
 class SubmitJob:
     def __init__(self, options=None):
         self.supported_programs = ['orca', 'orca_old', 'nbo', 'orca3', 'cfour']
+        self.parse_config()
+        self.set_defaults()
         if options is not None:
             self.parse_options(options)
         else:
@@ -25,23 +29,25 @@ class SubmitJob:
         self.select_resources()
         self.select_important_files()
 
-    def check_options(self, options):
+    def parse_config(self):
         """
-        Checks that options are valid.
-        WARNING: this is not an exhaustive check, instead it is merely a sanity
-        check for a few options
+        Parse the config file
         """
-        pass
+        # Add defaults from config file
+        self.config = ConfigParser()
+        config_file = os.path.join(os.path.expanduser("~"), '.config', 'job_queue', 'config')
+        if os.path.exists(config_file):
+            self.config.read(config_file)
 
-    def parse_options(self, options):
+    def set_defaults(self):
         """
-        Parse the options passed in, currently trusts all options
+        Add defaults from the config file
         """
-        default_options = {
-            'program': 'orca',
+        self.default_options = {
+            'program': '',
             'input': '{autoselect}',
             'output': '{autoselect}',
-            'queue': 'small',
+            'queue': '',
             'nodes': 1,
             'name': '{autoselect}',
             'debug': False,
@@ -49,8 +55,25 @@ class SubmitJob:
             'walltime': 8760,
         }
 
-        if any(k not in default_options for k in options):
-            raise Exception(f'Unsupported options passed to SubmitJob: {options}')
+        if 'submitjob' in self.config:
+            config_defaults = self.config['submitjob']
+            # Avoid adding extra options, otherwise it could accidentally
+            # overwrite pre-existing functions or variables!
+            extra_options = set(config_defaults) - set(self.default_options)
+            if extra_options:
+                raise ValueError(f'Invalid option(s) in config file: {extra_options}')
+
+            self.default_options.update(config_defaults)
+
+    def parse_options(self, options):
+        """
+        Parse the options passed in.
+        Currently trusts all option settings, but does not allow setting of unknown options.
+        """
+
+        extra_options = set(options) - set(self.default_options)
+        if extra_options:
+            raise Exception(f'Unsupported options passed to SubmitJob: {extra_options}')
 
         my_options = default_options
         my_options.update(options)
@@ -58,23 +81,33 @@ class SubmitJob:
 
         self.__dict__.update(my_options)
 
+    def check_options(self, options):
+        """
+        Checks that options are valid.
+        WARNING: this is not an exhaustive check, instead it is merely a sanity
+        check for a few options
+        TODO: Implement
+        """
+        pass
+
     def parse_args(self):
         """
         Parse the command line arguments
         """
         parser = argparse.ArgumentParser(description='Get the geometry from an output file.')
         parser.add_argument('-p', '--program', help='The program to run.',
-                            type=str, default='orca', choices=self.supported_programs)
+                            type=str, default=self.default_options['program'],
+                            choices=self.supported_programs)
         parser.add_argument('-i', '--input', help='The input file to run.',
-                            type=str, default='{autoselect}')
+                            type=str, default=self.default_options['input'])
         parser.add_argument('-o', '--output', help='Where to put the output.',
-                            type=str, default='{autoselect}')
+                            type=str, default=self.default_options['output'])
         parser.add_argument('-q', '--queue', help='What queue to use.',
-                            type=str, default='small')
+                            type=str, default=self.default_options['queue'])
         parser.add_argument('-n', '--nodes', help='The number of nodes to be used.',
                             type=int, default=1)
         parser.add_argument('-N', '--name', help='The name of the job.',
-                            type=str, default='{autoselect}')
+                            type=str, default=self.default_options['name'])
         parser.add_argument('-d', '--debug', help='Generate but don\'t submit .sh script.',
                             action='store_true', default=False)
         parser.add_argument('-a', '--job_array', help='Submit as a job array',
@@ -85,12 +118,6 @@ class SubmitJob:
         self.check_options(options)
 
         self.__dict__.update(options)
-
-    def parse_config(self):
-        """
-        Parse the config file
-        """
-        pass
 
     def get_host(self):
         """
@@ -114,7 +141,7 @@ class SubmitJob:
 
     def check_queue(self):
         """
-        Check to make sure the queue is invalid
+        Check to make sure the queue is valid
         """
         queues = {
             'zeus': ['small', 'batch'],
@@ -236,10 +263,13 @@ cleanup () {{
 trap '
 "Job terminated from outer space!" >> {self.output}
 cleanup
-echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.job_queue/failed
+echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/failed
 exit
 ' TERM
 '''
+        program_header = '#'*(len(self.program) + 4) \
+                         + f'\n# {self.program.upper()} #\n' \
+                         + '#'*(len(self.program) + 4)
 
         sub_file = f"""#!/bin/zsh
 #PBS -S /bin/zsh
@@ -252,9 +282,11 @@ exit
 #PBS -N {self.name}
 {job_array_str}
 
+{program_header}
+
 if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
 then
-    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.job_queue/submitted
+    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/submitted
 fi
 setopt EXTENDED_GLOB
 setopt NULL_GLOB
@@ -403,7 +435,7 @@ cleanup
 # At job to log of completed jobs
 if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
 then
-    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.job_queue/completed
+    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/completed
 fi"""
 
         self.sub_script_name = 'job.zsh'

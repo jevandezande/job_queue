@@ -9,7 +9,7 @@ from xml.etree import ElementTree
 from itertools import zip_longest
 from configparser import ConfigParser
 
-config_file = os.path.join(os.path.expanduser("~"), '.queue/config')
+config_file = os.path.join(os.path.expanduser("~"), '.config', 'job_queue', 'config')
 config = ConfigParser()
 config.read(config_file)
 
