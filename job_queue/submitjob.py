@@ -12,7 +12,7 @@ from configparser import ConfigParser
 
 class SubmitJob:
     def __init__(self, options=None):
-        self.supported_programs = ['orca', 'orca_old', 'nbo', 'orca3', 'cfour']
+        self.supported_programs = ['orca', 'orca_current', 'nbo', 'orca3', 'cfour']
         self.parse_config()
         self.set_defaults()
         if options is not None:
@@ -228,6 +228,7 @@ class SubmitJob:
         Selects the files to be copied back after a job is run.
         Utilizes ZSH syntax (literally pasted into a for loop)
         """
+        self.important_files = ''
         if 'orca' in self.program:
             self.important_files = '^(*.(tmp*|out|inp|hostnames))'
         elif self.program == 'cfour':
@@ -318,9 +319,9 @@ nodes=$(sort -u $PBS_NODEFILE)
 """
         if 'orca' in self.program:
             orca_paths = {
-                'orca_old': '/opt/orca',
-                'orca':     '/opt/orca_current',
-                'orca3':    '/home1/vandezande/progs/orca_3',
+                'orca':         '/opt/orca',
+                'orca_current': '/opt/orca_current',
+                'orca3':        '/home1/vandezande/progs/orca_3',
             }
             orca_path = orca_paths[self.program]
             mpi_path = '/opt/openmpi_1.10.2/bin'
