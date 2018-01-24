@@ -355,6 +355,8 @@ for file in {moinp_files_array} {xyz_files_array} *.gbw *.pc *.opt *.hess *.rrhe
 }}
 
 cd $tdir
+{cleanup}
+{trap}
 
 echo "Start: $(date)
 Job running on $PBS_O_HOST, running $(which orca) copied from {orca_path} on $(hostname) in $tdir
