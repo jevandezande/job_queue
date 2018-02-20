@@ -6,19 +6,23 @@ import argparse
 import subprocess
 
 from socket import gethostname
+from collections import OrderedDict
 
 from configparser import ConfigParser
 
 
+SUPPORTED_PROGRAMS = ['orca', 'orca_current', 'nbo', 'orca3', 'cfour']
+
+
 class SubmitJob:
     def __init__(self, options=None):
-        self.supported_programs = ['orca', 'orca_current', 'nbo', 'orca3', 'cfour']
         self.parse_config()
         self.set_defaults()
-        if options is not None:
-            self.parse_options(options)
-        else:
-            self.parse_args()
+
+        if options is None:
+            options = SubmitJob.parse_args(self.default_options)
+        self.parse_options(options)
+
         self.cwd = os.getcwd()
         self.get_host()
         self.get_user()
@@ -52,7 +56,9 @@ class SubmitJob:
             'name': '{autoselect}',
             'debug': False,
             'job_array': False,
-            'walltime': 8760,
+            'walltime': 8760,  # 365 days
+            'email': False,
+            'email_address': None,
         }
 
         if 'submitjob' in self.config:
@@ -65,6 +71,38 @@ class SubmitJob:
 
             self.default_options.update(config_defaults)
 
+    @staticmethod
+    def parse_args(default_options):
+        """
+        Parse the command line arguments
+        """
+        parser = argparse.ArgumentParser(description='Get the geometry from an output file.')
+        parser.add_argument('-p', '--program', help='The program to run.',
+                            type=str, default=default_options['program'],
+                            choices=SUPPORTED_PROGRAMS)
+        parser.add_argument('-i', '--input', help='The input file to run.',
+                            type=str, default=default_options['input'])
+        parser.add_argument('-o', '--output', help='Where to put the output.',
+                            type=str, default=default_options['output'])
+        parser.add_argument('-q', '--queue', help='What queue to use.',
+                            type=str, default=default_options['queue'])
+        parser.add_argument('-n', '--nodes', help='The number of nodes to be used.',
+                            type=int, default=1)
+        parser.add_argument('-N', '--name', help='The name of the job.',
+                            type=str, default=default_options['name'])
+        parser.add_argument('-d', '--debug', help='Generate but don\'t submit .sh script.',
+                            action='store_true', default=False)
+        parser.add_argument('-a', '--job_array', help='Submit as a job array',
+                            type=int, default=False)
+        parser.add_argument('-t', '--walltime', help='Max walltime of job',
+                            type=int, default=8760)
+        parser.add_argument('-m', '--email', help='Send email upon completion.',
+                            action='store_true', default=default_options['email'])
+        parser.add_argument('-M', '--email_address', help='Email address to send to.',
+                            type=str, default=default_options['email_address'])
+
+        return parser.parse_args().__dict__
+
     def parse_options(self, options):
         """
         Parse the options passed in.
@@ -75,11 +113,34 @@ class SubmitJob:
         if extra_options:
             raise Exception(f'Unsupported options passed to SubmitJob: {extra_options}')
 
-        my_options = default_options
+        my_options = self.default_options
         my_options.update(options)
+
+        # Convert options from strings to the correct type
+        for option, value in my_options.items():
+            if isinstance(value, str):
+                if value == 'True':
+                    my_options[option] = True
+                elif value == 'False':
+                    my_options[option] = False
+                elif value.isdigit():
+                    my_options[option] = int(value)
+                else:
+                    try:
+                        my_options[option] = float(value)
+                    except ValueError:
+                        pass
+
         self.check_options(my_options)
 
         self.__dict__.update(my_options)
+
+        self.pbs_options = OrderedDict()
+        if self.email and self.email != 'False':
+            if self.email_address is None:
+                raise ValueError('No email address specified.')
+            self.pbs_options['-m'] = 'e'
+            self.pbs_options['-M'] = self.email_address
 
     def check_options(self, options):
         """
@@ -89,35 +150,6 @@ class SubmitJob:
         TODO: Implement
         """
         pass
-
-    def parse_args(self):
-        """
-        Parse the command line arguments
-        """
-        parser = argparse.ArgumentParser(description='Get the geometry from an output file.')
-        parser.add_argument('-p', '--program', help='The program to run.',
-                            type=str, default=self.default_options['program'],
-                            choices=self.supported_programs)
-        parser.add_argument('-i', '--input', help='The input file to run.',
-                            type=str, default=self.default_options['input'])
-        parser.add_argument('-o', '--output', help='Where to put the output.',
-                            type=str, default=self.default_options['output'])
-        parser.add_argument('-q', '--queue', help='What queue to use.',
-                            type=str, default=self.default_options['queue'])
-        parser.add_argument('-n', '--nodes', help='The number of nodes to be used.',
-                            type=int, default=1)
-        parser.add_argument('-N', '--name', help='The name of the job.',
-                            type=str, default=self.default_options['name'])
-        parser.add_argument('-d', '--debug', help='Generate but don\'t submit .sh script.',
-                            action='store_true', default=False)
-        parser.add_argument('-a', '--job_array', help='Submit as a job array',
-                            type=int, default=False)
-        parser.add_argument('-t', '--walltime', help='Max walltime of job',
-                            type=int, default=8760)
-        options = parser.parse_args().__dict__
-        self.check_options(options)
-
-        self.__dict__.update(options)
 
     def get_host(self):
         """
@@ -242,7 +274,10 @@ class SubmitJob:
         """
         qsubopt = ''
         error_file = 'error'
-        job_array_str = f'#PBS -t 0-{self.job_array-1}' if self.job_array else ''
+
+        pbs_options_str = f'#PBS -t 0-{self.job_array-1}' if self.job_array else ''
+        pbs_options_str += '\n'.join(f'#PBS {flag} {value}' for flag, value in self.pbs_options.items())
+
         cleanup = f'''
 # Function to delete unnecessary files
 cleanup () {{
@@ -264,13 +299,14 @@ cleanup () {{
 trap '
 "Job terminated from outer space!" >> {self.output}
 cleanup
-echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/failed
+echo "$(basename PBS_JOBID): {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/failed
 exit
 ' TERM
 '''
-        program_header = '#'*(len(self.program) + 4) \
-                         + f'\n# {self.program.upper()} #\n' \
-                         + '#'*(len(self.program) + 4)
+        program_header = f'''\
+##{"#"*len(self.program)}##
+# {self.program.upper()} #
+##{'#'*len(self.program)}##'''
 
         sub_file = f"""#!/bin/zsh
 #PBS -S /bin/zsh
@@ -281,13 +317,13 @@ exit
 #PBS -j oe
 #PBS -e {error_file}
 #PBS -N {self.name}
-{job_array_str}
+{pbs_options_str}
 
 {program_header}
 
 if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
 then
-    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/submitted
+    echo "$(basename PBS_JOBID): {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/submitted
 fi
 setopt EXTENDED_GLOB
 setopt NULL_GLOB
@@ -427,7 +463,7 @@ echo "Finished"
 """
 
         else:
-            raise AttributeError(f'Only {self.supported_programs} currently supported.')
+            raise AttributeError(f'Only {SUPPORTED_PROGRAMS} currently supported.')
 
         sub_file += f"""
 ###########
