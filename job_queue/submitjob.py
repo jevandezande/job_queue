@@ -11,7 +11,7 @@ from collections import OrderedDict
 from configparser import ConfigParser
 
 
-SUPPORTED_PROGRAMS = ['orca', 'orca_current', 'nbo', 'orca3', 'cfour']
+SUPPORTED_PROGRAMS = ['cfour', 'cfour_v2', 'nbo', 'orca3', 'orca', 'orca_current']
 
 
 class SubmitJob:
@@ -59,6 +59,7 @@ class SubmitJob:
             'walltime': 8760,  # 365 days
             'email': False,
             'email_address': None,
+            'hold': False,
         }
 
         if 'submitjob' in self.config:
@@ -74,9 +75,14 @@ class SubmitJob:
     @staticmethod
     def parse_args(default_options):
         """
-        Parse the command line arguments
+        Parse the command line arguments.
         """
-        parser = argparse.ArgumentParser(description='Get the geometry from an output file.')
+        options_str = '\n'.join(f'{k}: {v}' for k, v in default_options.items())
+        parser = argparse.ArgumentParser(description=f"""
+Submit jobs to a queue.
+Default Options (as configured by .config/job_queue/config)
+{options_str}
+        """, formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument('-p', '--program', help='The program to run.',
                             type=str, default=default_options['program'],
                             choices=SUPPORTED_PROGRAMS)
@@ -100,6 +106,8 @@ class SubmitJob:
                             action='store_true', default=default_options['email'])
         parser.add_argument('-M', '--email_address', help='Email address to send to.',
                             type=str, default=default_options['email_address'])
+        parser.add_argument('--hold', help='submit the job in a held status',
+                            action='store_true', default=default_options['hold'])
 
         return parser.parse_args().__dict__
 
@@ -192,7 +200,7 @@ class SubmitJob:
         """
         # Select the input file name if not specified
         if self.input == '{autoselect}':
-            if self.program == 'cfour':
+            if self.program[:5] == 'cfour':
                 self.input = 'ZMAT'
             elif self.program == 'gamess':
                 self.input = 'input.inp'
@@ -265,7 +273,7 @@ class SubmitJob:
         self.important_files = ''
         if 'orca' in self.program:
             self.important_files = '^(*.(tmp*|out|inp|hostnames))'
-        elif self.program == 'cfour':
+        elif self.program[:5] == 'cfour':
             self.important_files = 'ZMATnew FCMINT FCM ANH'
         else:
             print("Don't know what files to copy back")
@@ -423,8 +431,8 @@ echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 gennbo.exe < {self.input} > {self.output}
 """
 
-        elif self.program == 'cfour':
-            cfour_path = '/home1/vandezande/.install/cfour'
+        elif self.program[:5] == 'cfour':
+            cfour_path = f'/home1/vandezande/.install/{self.program}'
             inp_files = ''
             start_dir = '$PBS_O_WORKDIR/$PBS_ARRAYID/'
             sub_file += f"""
@@ -439,6 +447,9 @@ if [ ! -e GENBAS ]
 then
     echo "Using default GENBAS" >> {self.output}
     cp {cfour_path}/basis/GENBAS $tdir
+else
+    echo "Using GENBAS in directory" >> {self.output}
+    cp GENBAS $tdir
 fi
 
 for file in ZMAT FCM FCMINT {inp_files}
