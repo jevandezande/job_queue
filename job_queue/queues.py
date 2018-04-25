@@ -1,4 +1,5 @@
 import re
+import shutil
 import getpass
 import subprocess
 import os.path
@@ -37,6 +38,9 @@ COLUMN_WIDTH = 11 + JOB_ID_LENGTH + NAME_LENGTH
 
 
 class Queues:
+    """
+    A class to display the results of a grid engine
+    """
     def __init__(self, omit=None):
         self.omit = omit if omit else []
         self.queues = {}
@@ -64,6 +68,10 @@ class Queues:
     def __ne__(self, other):
         return not self == other
 
+    def __iter__(self):
+        for name, queue in self.queues.items():
+            yield queue
+
     # noinspection PyPep8
     def print(self, numjobs=50, person=None):
         """
@@ -71,6 +79,14 @@ class Queues:
         """
         # Form header (without small queues)
         large_num = sum([size > SMALL_QUEUE for size in self.sizes.values()])
+
+        # 80, 20 is the fallback size
+        terminal_width, terminal_height = shutil.get_terminal_size((80, 20))
+
+        if COLUMN_WIDTH*large_num > terminal_width:
+            # try to shrink
+            pass
+
         # Horizontal line (uses box drawing characters)
         top_line = '\033[95m' + '┌' + '┬'.join(['─'*(COLUMN_WIDTH - 1)]*large_num) + '┐' + '\033[0m\n'
         mid_line = '\033[95m' + '├' + '┼'.join(['─'*(COLUMN_WIDTH - 1)]*large_num) + '┤' + '\033[0m\n'
@@ -78,17 +94,15 @@ class Queues:
 
         out = top_line
 
-        name_form = '{} ({:2d}/{:2d}/{:2d})'
         # Print a nice header
         for name, queue in sorted(self.queues.items()):
             # Print small queues near the end
             if queue.size <= SMALL_QUEUE:
                 continue
-            out += BAR + name_form.format(name, queue.used, queue.avail, queue.queued).center(COLUMN_WIDTH-1)
-        out += BAR + '\n' + mid_line
-        header = BAR + 'ID'.center(JOB_ID_LENGTH) + ' USER  ' + \
-            'Job Name'.center(NAME_LENGTH) + ' ST'
-        out += header*large_num + BAR + '\n' + mid_line
+            out += BAR + f'{name} ({queue.used:2d}/{queue.avail:2d}/{queue.queued:2d})'.center(COLUMN_WIDTH-1)
+        out += f'{BAR}\n{mid_line}'
+        header = BAR + 'ID'.center(JOB_ID_LENGTH) + ' USER  ' + 'Job Name'.center(NAME_LENGTH) + ' ST'
+        out += f'{header*large_num}{BAR}\n{mid_line}'
 
         if person is True:
             person = getpass.getuser()
@@ -115,8 +129,8 @@ class Queues:
                 out += BAR + '\n'
                 break
             for job in job_row:
-                out += BAR + str(job) if job else blank
-            out += BAR + '\n'
+                out += f'{BAR}{job}' if job else blank
+            out += f'{BAR}\n'
         out += mid_line if small_queues else bot_line
 
         # Display small queues below other queues
@@ -288,9 +302,10 @@ class Queues:
                 if job.state == 'r':
                     self.queues[queue].running[job.id] = job
                 else:
+                    # Everything else is considered queueing
                     try:
                         self.queues[queue].queueing[job.id] = job
-                    except:
+                    except Error as e:
                         print(job)
                         raise
         else:
@@ -344,13 +359,54 @@ izeussn153
                 if queue == 'big':
                     queue = 'batch'
 
+                try:
+                    np = int(re.search('np = (.*)', job).group(1))
+                except AttributeError as e:
+                    np = 0
+
                 if queue not in omit:
                     if queue in self.sizes:
-                        self.sizes[queue] += 1
+                        self.sizes[queue] += np
                     else:
-                        self.sizes[queue] = 1
+                        self.sizes[queue] = np
         else:
             raise Exception('Could not read queue sizes, only PBS and SGE currently supported.')
+
+    def job_from_id(self, id):
+        """
+        Find a Job in the queues from its ID
+        """
+        for queue in self:
+            if id in queue.jobs:
+                return queue.jobs[id]
+
+    @property
+    def jobs(self):
+        jobs = []
+        for queue in self:
+            jobs += list(queue.jobs.items())
+        return OrderedDict(jobs)
+
+    @property
+    def running(self):
+        jobs = []
+        for queue in self:
+            jobs += list(queue.running.items())
+        return OrderedDict(jobs)
+
+    @property
+    def queueing(self):
+        jobs = []
+        for queue in self:
+            jobs += list(queue.queueing.items())
+        return OrderedDict(jobs)
+
+    @property
+    def holding(self):
+        jobs = []
+        for queue in self:
+            jobs += list(queue.holding.items())
+        return OrderedDict(jobs)
 
 
 class Queue:
@@ -362,18 +418,22 @@ class Queue:
         Initialize a queue with its jobs
 
         :param running: an OrderedDict of Jobs that are running
-        :param queueing: an OrderedDict of Jobs that are queueing
+        :param queueing: an OrderedDict of Jobs that are queueing (includes holding)
         """
         self.size = size
         self.name = name
         if running is None:
             self.running = OrderedDict()
-        else:
+        elif isinstance(running, OrderedDict()):
             self.running = running
+        else:
+            raise TypeError(f'Expected running to be an OrderedDict, got: {type(running)}')
         if queueing is None:
             self.queueing = OrderedDict()
-        else:
+        elif isinstance(queueing, OrderedDict()):
             self.queueing = queueing
+        else:
+            raise TypeError(f'Expected queueing to be an OrderedDict, got: {type(queueing)}')
 
     def __eq__(self, other):
         if len(self) != len(other):
@@ -386,15 +446,20 @@ class Queue:
     def __ne__(self, other):
         return not self == other
 
+    def __iter__(self):
+        for id, job in self.jobs.items():
+            yield job
+
     def __len__(self):
+        """ Number of jobs """
         return len(self.running) + len(self.queueing)
 
     def __list__(self):
-        """Make a list of all the Jobs in the queue"""
+        """ Make a list of all the Jobs in the queue """
         return list(self.running.values()) + list(self.queueing.values())
 
     def __str__(self):
-        """Make a string with each job on a new line"""
+        """ Make a string with each job on a new line """
         return self.print()
 
     def print(self, numlines=50, person=False):
@@ -410,7 +475,7 @@ class Queue:
         return out
 
     def print_inline(self, width, max_num=None, person=False):
-        """Print jobs inline"""
+        """ Print jobs inline """
         if person:
             jobs = self.person_jobs(person)
         else:
@@ -422,8 +487,8 @@ class Queue:
             if not (max_num is None) and i >= max_num:
                 break
             if not (i + 1) % width:
-                out += '\n' + BAR
-            out += str(job) + BAR
+                out += f'\n{BAR}'
+            out += f'{job}{BAR}'
 
         # Add blank spots to fill out to end
         if (len(jobs) + 1) % width:
@@ -431,16 +496,13 @@ class Queue:
         return out
 
     def set(self, job_id, job, position):
-        """
-        Set a job in the specified position (running or queueing)
-        """
+        """ Set a job in the specified position (running or queueing) """
         if position == 'running':
             self.running[job_id] = job
         elif position == 'queueing':
             self.queueing[job_id] = job
         else:
-            raise Exception("Invalid position, must be either running or"
-                            "queueing.")
+            raise Exception("Invalid position, must be either running or queueing.")
 
     @property
     def used(self):
@@ -455,10 +517,17 @@ class Queue:
         return len(self.queueing)
 
     @property
+    def held(self):
+        return len(self.holding)
+
+    @property
+    def holding(self):
+        """ Jobs on hold (also included in queueing) """
+        return OrderedDict([(id, job) for id, job in self.queueing.items() if job.state == 'h'])
+
+    @property
     def jobs(self):
-        """
-        Makes an OrderedDict of all the running and queueing Jobs
-        """
+        """ Makes an OrderedDict of all Jobs (running and queueing (including holding)) """
         ret = OrderedDict()
         # OrderedDicts cannot be readily combined
         for k, v in sorted(self.running.items()):
@@ -468,7 +537,7 @@ class Queue:
         return ret
 
     def person_jobs(self, person):
-        """Return an OrderedDict of Jobs with the specified owner"""
+        """ Return an OrderedDict of Jobs with the specified owner """
         if not person:
             return self.jobs
 
@@ -481,11 +550,16 @@ class Queue:
 
 class Job:
     """
-    A simple class that contains important information about a job and prints it
-    nicely
+    A class that contains important information about a job and prints it nicely
     """
     def __init__(self, job_xml, grid_engine):
-        self.id, self.name, self.state, self.owner, self.queue, self.workdir = Job.read_job_xml(job_xml, grid_engine)
+        self.data = Job.read_job_xml(job_xml, grid_engine)
+        self.id = self.data['jid']
+        self.name = self.data['name']
+        self.state = self.data['state']
+        self.owner = self.data['owner']
+        self.queue = self.data['queue']
+        self.workdir = self.data['workdir']
 
     def __eq__(self, other):
         if self.id == other.id and \
@@ -500,18 +574,21 @@ class Job:
         return not self == other
 
     def __str__(self):
-        """Print a short description of the job, with color"""
-        job_form = '{:>' + str(JOB_ID_LENGTH) + 'd} {:<5s} {:<' + str(NAME_LENGTH) + 's} {}{:2s}' + colors.normal
+        """ Print a short description of the job, with color """
+        job_form = f'{{:>{JOB_ID_LENGTH}d}} {{:<5s}} {{:<{NAME_LENGTH}s}} {{}}{{:2s}}{colors.normal}'
 
         # Color queue status by type, use red if unrecognized
-        job_colors = defaultdict(lambda: colors.red, {'r': colors.green, 'qw': colors.blue})
+        job_colors = defaultdict(lambda: colors.red, {'r': colors.green, 'q': colors.blue})
 
         # Bold the person's jobs
         owner = f'{self.owner:5.5s}'
         if self.owner == getpass.getuser():
             owner = colors.bold + owner + colors.normal
 
-        return job_form.format(int(self.id), owner, self.name[:NAME_LENGTH],
+        # chop off decimal if it exists
+        id = int(self.id)
+
+        return job_form.format(id, owner, self.name[:NAME_LENGTH],
                                job_colors[self.state], self.state[:2])
 
     @staticmethod
@@ -519,8 +596,10 @@ class Job:
         """
         Read the xml of qstat and find the necessary variables
         """
+        results = {}
         if grid_engine == 'sge':
             jid = int(job_xml.find('JB_job_number').text)
+            results['jid'] = jid
             tasks = job_xml.find('tasks')
             # If there are multiple tasks with the same id, make the id a float
             # with the task number being the decimal
@@ -530,18 +609,20 @@ class Job:
                 # SGE is being cute and comma separates two numbers if sequential
                 task = task.split(',')[0]
                 jid += int(task) / 10 ** len(task)
-            name = job_xml.find('JB_name').text
-            state = job_xml.get('state').lower()
-            owner = job_xml.find('JB_owner').text
-            state2 = job_xml.find('state').text
+            results['name'] = job_xml.find('JB_name').text
+            results['state2'] = job_xml.get('state').lower()
+            results['owner'] = job_xml.find('JB_owner').text
+            results['state'] = job_xml.find('state').text
+            if results['state'] == 'qw':
+                results['state'] = 'q'  # Rename for compatibility
             try:
                 queue = job_xml.find('hard_req_queue').text
             except AttributeError as e:
-                queue = 'debug.q'
-            if (state == 'running' and state2 != 'r') or \
-                    (state == 'pending' and state2 != 'qw'):
+                results['queue'] = 'debug.q'
+            if (results['state2'] == 'running' and results['state'] != 'r') or \
+                    (results['state2'] == 'pending' and results['state'] != 'q'):
                 pass
-            return jid, name, state2, owner, queue
+            return results
 
         elif grid_engine == 'pbs':
             jid = job_xml.find('Job_Id').text.split('.')[0]
@@ -556,22 +637,29 @@ class Job:
                     # -t must not be supported
                     jid = int(jid)
 
-            name = job_xml.find('Job_Name').text
-            state = job_xml.find('job_state').text.lower()
-            owner = job_xml.find('Job_Owner').text.split('@')[0]
-            queue = job_xml.find('queue').text
+            results['jid'] = jid
+            results['name'] = job_xml.find('Job_Name').text
+            results['state'] = job_xml.find('job_state').text.lower()
+            results['owner'] = job_xml.find('Job_Owner').text.split('@')[0]
+            results['queue'] = job_xml.find('queue').text
 
             resource_list = job_xml.find('Resource_List')
-            nodect, nodes = resource_list.find('nodect').text, resource_list.find('nodes').text
 
-            workdir = None
+            """ Can look like:
+<nodect>1</nodect><nodes>1:ppn=8</nodes>
+<nodect>8</nodect><nodes>8</nodes>
+"""
+            results['nodect'] = resource_list.find('nodect').text
+            results['nodes'] = resource_list.find('nodes').text
+
+            results['workdir'] = None
             try:
                 variables = job_xml.find('Variable_List').text.split(',')
                 variables = dict(kv.split('=') for kv in variables)
-                workdir = variables['PBS_O_WORKDIR']
+                results['workdir'] = variables['PBS_O_WORKDIR']
             except AttributeError:
                 pass
 
-            return jid, name, state, owner, queue, workdir
+            return results
         else:
             raise Exception('Could not read XML, only PBS and SGE currently supported.')
