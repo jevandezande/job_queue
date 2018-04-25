@@ -10,7 +10,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from job_queue.queues import Queues
 
-parser = argparse.ArgumentParser(description="Get information about the queues.")
+parser = argparse.ArgumentParser(description="""\
+Get information about the queues.
+
+The header is interpretted as 'queue_name (#running_jobs/#slots/#queued_jobs)'
+For PBS the #slots corresponds to the number of proccessors available, while
+for SGE it corresponds to the number of nodes available.
+""")
 parser.add_argument('-n', '--number', help='The number of jobs to be output.',
                     type=int, default=50)
 parser.add_argument('-a', '--all', help='Print all jobs.',
