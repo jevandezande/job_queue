@@ -155,15 +155,16 @@ class SubmitJob:
         """
         Determine where this is running
         """
+        self.host = None
         hostname = gethostname()
         if hostname in ['zeusln1', 'zeusln2']:
             self.host = 'zeus'
         elif hostname in ['master1', 'master2']:
             self.host = 'hera'
-        else:
-            raise AttributeError(f'No suitable host found for hostname {hostname}')
-
-        return self.host
+        elif hostname in ['icmaster1.mpi-bac', 'icmaster2.mpi-bac']:
+            self.host = 'hermes'
+        elif self.debug:
+            print(f'No suitable host found for hostname {hostname}')
 
     def get_user(self):
         """
@@ -178,8 +179,9 @@ class SubmitJob:
         queues = {
             'zeus': ['small', 'batch'],
             'hera': ['small', 'batch'],
+            'hermes': ['small', 'batch'],
         }
-        if self.queue in queues[self.host]:
+        if self.host is None or self.queue in queues[self.host]:
             return True
         else:
             raise AttributeError(f'No queue named {self.queue} on {self.host}')
