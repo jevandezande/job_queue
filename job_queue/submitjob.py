@@ -309,7 +309,7 @@ cleanup () {{
 trap '
 "Job terminated from outer space!" >> {self.output}
 cleanup
-echo "$(basename PBS_JOBID): {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/failed
+echo "$PBS_JOBID_int: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/failed
 exit
 ' TERM
 '''
@@ -329,11 +329,14 @@ exit
 #PBS -N {self.name}
 {pbs_options_str}
 
+# Only the number part
+PBS_JOBID_int=$(echo $PBS_JOBID | cut -d '.' -f 1)
+
 {program_header}
 
 if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
 then
-    echo "$(basename PBS_JOBID): {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/submitted
+    echo "$PBS_JOBID_int: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/submitted
 fi
 setopt EXTENDED_GLOB
 setopt NULL_GLOB
@@ -408,7 +411,7 @@ cd $tdir
 echo "Start: $(date)
 Job running on $PBS_O_HOST, running $(which orca) copied from {orca_path} on $(hostname) in $tdir
 Shared library path: $LD_LIBRARY_PATH
-PBS Job ID $PBS_JOBID is running on $(echo $a | wc -l) nodes:" >> {self.output}
+PBS Job ID $PBS_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 # = calls full path in zsh
@@ -425,7 +428,7 @@ cp $PBS_O_WORKDIR/$PBS_ARRAYID/{self.input_root}.* $tdir/
 cd $tdir
 echo "Start: $(date)
 Job running on $PBS_O_HOST, running $(which gennbo.exe) on $(hostname) in $tdir
-PBS Job ID $PBS_JOBID is running on $(echo $a | wc -l) nodes:" >> {self.output}
+PBS Job ID $PBS_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 gennbo.exe < {self.input} > {self.output}
@@ -467,7 +470,7 @@ cd $tdir
 
 echo "Start: $(date)
 Job running on $PBS_O_HOST, running $(which xcfour) on $(hostname) in $tdir
-PBS Job ID $PBS_JOBID is running on $(echo $a | wc -l) nodes:" >> {self.output}
+PBS Job ID $PBS_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 xcfour {self.input} >>& {self.output}
@@ -487,7 +490,7 @@ cleanup
 # At job to log of completed jobs
 if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
 then
-    echo "${{PBS_JOBID:r}}: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/completed
+    echo "$PBS_JOBID_int: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/completed
 fi"""
 
         self.sub_script_name = 'job.zsh'
