@@ -28,13 +28,15 @@ class colors:
 
 BAR = colors.purple + '│' + colors.normal
 JOB_ID_LENGTH = 7
+USER_ID_LENGTH = 5
 NAME_LENGTH = 22
 SMALL_QUEUE = 3
 if 'queues' in config:
     JOB_ID_LENGTH = max(config['queues'].getint('job_id_length', 7), 4)
+    USER_ID_LENGTH = max(config['queues'].getint('user_id_length', 5), 4)
     NAME_LENGTH = max(config['queues'].getint('name_length', 22), 8)
     SMALL_QUEUE = max(config['queues'].getint('small_queue', 3), 1)
-COLUMN_WIDTH = 11 + JOB_ID_LENGTH + NAME_LENGTH
+COLUMN_WIDTH = JOB_ID_LENGTH + USER_ID_LENGTH + NAME_LENGTH + 5
 
 
 class Queues:
@@ -101,7 +103,7 @@ class Queues:
                 continue
             out += BAR + f'{name} ({queue.used:2d}/{queue.avail:2d}/{queue.queued:2d})'.center(COLUMN_WIDTH-1)
         out += f'{BAR}\n{mid_line}'
-        header = BAR + 'ID'.center(JOB_ID_LENGTH) + ' USER  ' + 'Job Name'.center(NAME_LENGTH) + ' ST'
+        header = BAR + 'ID'.center(JOB_ID_LENGTH) + ' ' + 'USER'.center(USER_ID_LENGTH) + ' ' + 'Job Name'.center(NAME_LENGTH) + ' S'
         out += f'{header*large_num}{BAR}\n{mid_line}'
 
         if person is True:
@@ -575,13 +577,13 @@ class Job:
 
     def __str__(self):
         """ Print a short description of the job, with color """
-        job_form = f'{{:>{JOB_ID_LENGTH}d}} {{:<5s}} {{:<{NAME_LENGTH}s}} {{}}{{:2s}}{colors.normal}'
+        job_form = f'{{:>{JOB_ID_LENGTH}d}} {{:<{USER_ID_LENGTH}s}} {{:<{NAME_LENGTH}s}} {{}}{{:1s}}{colors.normal}'
 
         # Color queue status by type, use red if unrecognized
         job_colors = defaultdict(lambda: colors.red, {'r': colors.green, 'q': colors.blue})
 
+        owner = cut_and_pad(self.owner, USER_ID_LENGTH)
         # Bold the person's jobs
-        owner = f'{self.owner:5.5s}'
         if self.owner == getpass.getuser():
             owner = colors.bold + owner + colors.normal
 
@@ -663,3 +665,10 @@ class Job:
             return results
         else:
             raise Exception('Could not read XML, only PBS and SGE currently supported.')
+
+
+def cut_and_pad(in_str, cut):
+    """
+    Cut the string to `cut`. If not that long, pad it
+    """
+    return in_str[:cut].ljust(cut)
