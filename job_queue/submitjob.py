@@ -11,7 +11,7 @@ from collections import OrderedDict
 from configparser import ConfigParser
 
 
-SUPPORTED_PROGRAMS = ['cfour', 'cfour_v2', 'nbo', 'orca3', 'orca', 'orca_current']
+SUPPORTED_PROGRAMS = ['cfour', 'cfour_v2', 'nbo', 'orca3', 'orca', 'orca_current', 'psi4']
 
 
 class SubmitJob:
@@ -288,7 +288,7 @@ Default Options (as configured by .config/job_queue/config)
         pbs_options_str = f'#PBS -t 0-{self.job_array-1}' if self.job_array else ''
         pbs_options_str += '\n'.join(f'#PBS {flag} {value}' for flag, value in self.pbs_options.items())
 
-        cleanup = f'''
+        cleanup_func = f'''
 # Function to delete unnecessary files
 cleanup () {{
     # Copy the important stuff
@@ -405,7 +405,7 @@ for file in {moinp_files_array} {xyz_files_array} *.gbw *.pc *.opt *.hess *.rrhe
 }}
 
 cd $tdir
-{cleanup}
+{cleanup_func}
 {trap}
 
 echo "Start: $(date)
@@ -461,7 +461,7 @@ for file in ZMAT FCM FCMINT {inp_files}
 }}
 
 cd $tdir
-{cleanup}
+{cleanup_func}
 {trap}
 
 ###############
@@ -477,7 +477,38 @@ xcfour {self.input} >>& {self.output}
 
 echo "Finished"
 """
+        elif self.program == 'psi4':
+            psi4 = '/home1/vandezande/.bin/psi4'
+            inp_files = ''
+            start_dir = '$PBS_O_WORKDIR/$PBS_ARRAYID/'
+            sub_file += f"""
+#################
+# Psi4 specific #
+#################
+# Copy everything
 
+cp -v {self.input} $tdir >>& blabla
+echo $tdir
+echo {self.input}
+
+cd $tdir
+pwd
+{cleanup_func}
+{trap}
+
+###############
+# Run the job #
+###############
+
+echo "Start: $(date)
+Job running on $PBS_O_HOST, running $(which {psi4}) on $(hostname) in $tdir
+PBS Job ID $PBS_JOBID is running on $(echo $a | wc -l) nodes:" >> {self.output}
+echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
+
+{psi4} -i {self.input} -o {self.output}
+
+echo "Finished"
+"""
         else:
             raise AttributeError(f'Only {SUPPORTED_PROGRAMS} currently supported.')
 
