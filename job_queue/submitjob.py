@@ -60,10 +60,14 @@ class SubmitJob:
             'email': False,
             'email_address': None,
             'hold': False,
+            'name_length': 20,
         }
+        if 'queues' in self.config:
+            self.default_options['name_length'] = self.config['queues'].getint('name_length', 20)
 
         if 'submitjob' in self.config:
             config_defaults = self.config['submitjob']
+
             # Avoid adding extra options, otherwise it could accidentally
             # overwrite pre-existing functions or variables!
             extra_options = set(config_defaults) - set(self.default_options)
@@ -235,7 +239,7 @@ Default Options (as configured by .config/job_queue/config)
         """
         if self.name == '{autoselect}':
             try:
-                path = self.cwd[-20:]
+                path = self.cwd[-self.name_length:]
                 self.name = path[path.index('/') + 1:]
             except (ValueError, IndexError) as e:
                 dirs = self.cwd.split('/')
