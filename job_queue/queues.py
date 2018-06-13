@@ -121,18 +121,30 @@ class Queues:
 
         blank = BAR + ' '*(COLUMN_WIDTH-1)
         for i, job_row in enumerate(zip_longest(*job_list)):
+            # Show how many more jobs are in each queue
             if i >= numjobs:
-                # Add how many more jobs are running in each queue
+                user = 'User ' if person else ''
                 for queue in job_list:
                     if len(queue) > numjobs:
-                        out += BAR + f'\033[1m{len(queue) - numjobs: >+5} jobs\033[0m'.center(COLUMN_WIDTH+7)
+                        out += BAR + f'\033[1m{len(queue) - numjobs: >+5} {user} jobs\033[0m'.center(COLUMN_WIDTH+7)
                     else:
                         out += blank
                 out += BAR + '\n'
                 break
+
             for job in job_row:
                 out += f'{BAR}{job}' if job else blank
             out += f'{BAR}\n'
+
+        if person:
+            # Add how many other jobs are in each queue
+            for queue, queue_jobs in zip(self, job_list):
+                if len(queue) > i:
+                    out += BAR + f'\033[1m{len(queue) - len(queue_jobs) - 1: >+5} Other jobs\033[0m'.center(COLUMN_WIDTH+7)
+                else:
+                    out += blank
+            out += BAR + '\n'
+
         out += mid_line if small_queues else bot_line
 
         # Display small queues below other queues
