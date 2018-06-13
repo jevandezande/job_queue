@@ -79,20 +79,21 @@ class Queues:
         """
         Print the queues in a nice table
         """
-        # Form header (without small queues)
+        # Form header (without small queues), must be at least one queue wide
         large_num = sum([size > SMALL_QUEUE for size in self.sizes.values()])
+        num_columns = max(large_num, 1)
 
         # 80, 20 is the fallback size
         terminal_width, terminal_height = shutil.get_terminal_size((80, 20))
 
-        if COLUMN_WIDTH*large_num > terminal_width:
+        if COLUMN_WIDTH*num_columns > terminal_width:
             # try to shrink
             pass
 
         # Horizontal line (uses box drawing characters)
-        top_line = '\033[95m' + '┌' + '┬'.join(['─'*(COLUMN_WIDTH - 1)]*large_num) + '┐' + '\033[0m\n'
-        mid_line = '\033[95m' + '├' + '┼'.join(['─'*(COLUMN_WIDTH - 1)]*large_num) + '┤' + '\033[0m\n'
-        bot_line = '\033[95m' + '└' + '┴'.join(['─'*(COLUMN_WIDTH - 1)]*large_num) + '┘' + '\033[0m\n'
+        top_line = '\033[95m' + '┌' + '┬'.join(['─'*(COLUMN_WIDTH - 1)]*num_columns) + '┐' + '\033[0m\n'
+        mid_line = '\033[95m' + '├' + '┼'.join(['─'*(COLUMN_WIDTH - 1)]*num_columns) + '┤' + '\033[0m\n'
+        bot_line = '\033[95m' + '└' + '┴'.join(['─'*(COLUMN_WIDTH - 1)]*num_columns) + '┘' + '\033[0m\n'
 
         out = top_line
 
@@ -102,9 +103,10 @@ class Queues:
             if queue.size <= SMALL_QUEUE:
                 continue
             out += BAR + f'{queue.name} ({queue.used:2d}/{queue.avail:2d}/{queue.queued:2d})'.center(COLUMN_WIDTH-1)
-        out += f'{BAR}\n{mid_line}'
+        if large_num:
+            out += f'{BAR}\n{mid_line}'
         header = BAR + 'ID'.center(JOB_ID_LENGTH) + ' ' + 'USER'.center(USER_ID_LENGTH) + ' ' + 'Job Name'.center(NAME_LENGTH) + ' S'
-        out += f'{header*large_num}{BAR}\n{mid_line}'
+        out += f'{header*num_columns}{BAR}\n'
 
         if person is True:
             person = getpass.getuser()
@@ -118,6 +120,9 @@ class Queues:
                     small_queues.append(queue)
                 continue
             job_list.append(queue.person_jobs(person).values())
+
+        if large_num:
+            out += mid_line
 
         blank = BAR + ' '*(COLUMN_WIDTH-1)
         for i, job_row in enumerate(zip_longest(*job_list)):
@@ -136,7 +141,7 @@ class Queues:
                 out += f'{BAR}{job}' if job else blank
             out += f'{BAR}\n'
 
-        if person:
+        if person and large_num:
             # Add how many other jobs are in each queue
             for queue, queue_jobs in zip(self, job_list):
                 if len(queue) > i:
@@ -145,13 +150,12 @@ class Queues:
                     out += blank
             out += BAR + '\n'
 
-        out += mid_line if small_queues else bot_line
-
         # Display small queues below other queues
         for i, queue in enumerate(small_queues):
-            out += queue.print_inline(len(self.sizes) - large_num, None, person) + '\n'
-            out += mid_line if i < len(small_queues) - 1 else bot_line
+            out += mid_line
+            out += queue.print_inline(num_columns, numjobs, person) + '\n'
 
+        out += bot_line
         # Remove newline character
         out = out[:-1]
 
@@ -488,7 +492,7 @@ class Queue:
 
         return out
 
-    def print_inline(self, width, max_num=None, person=False):
+    def print_inline(self, num_columns, max_num=None, person=False):
         """ Print jobs inline """
         if person:
             jobs = self.person_jobs(person)
@@ -500,13 +504,13 @@ class Queue:
         for i, job in enumerate(jobs.values()):
             if not (max_num is None) and i >= max_num:
                 break
-            if not (i + 1) % width:
+            if not (i + 1) % num_columns:
                 out += f'\n{BAR}'
             out += f'{job}{BAR}'
 
         # Add blank spots to fill out to end
-        if (len(jobs) + 1) % width:
-            out += (' '*COLUMN_WIDTH*(width - (len(jobs) + 1) % width))[:-1] + BAR
+        if (len(jobs) + 1) % num_columns:
+            out += (' '*COLUMN_WIDTH*(num_columns - (len(jobs) + 1) % num_columns))[:-1] + BAR
         return out
 
     def set(self, job_id, job, position):
