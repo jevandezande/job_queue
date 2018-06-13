@@ -62,7 +62,7 @@ class Queues:
         """
         if len(self.queues) != len(other.queues):
             return False
-        for my_queue, other_queue in zip(self.queues.values(), other.queues.values()):
+        for my_queue, other_queue in zip(self, other):
             if my_queue != other_queue:
                 return False
         return True
@@ -71,7 +71,7 @@ class Queues:
         return not self == other
 
     def __iter__(self):
-        for name, queue in self.queues.items():
+        for name, queue in sorted(self.queues.items()):
             yield queue
 
     # noinspection PyPep8
@@ -97,11 +97,11 @@ class Queues:
         out = top_line
 
         # Print a nice header
-        for name, queue in sorted(self.queues.items()):
+        for queue in self:
             # Print small queues near the end
             if queue.size <= SMALL_QUEUE:
                 continue
-            out += BAR + f'{name} ({queue.used:2d}/{queue.avail:2d}/{queue.queued:2d})'.center(COLUMN_WIDTH-1)
+            out += BAR + f'{queue.name} ({queue.used:2d}/{queue.avail:2d}/{queue.queued:2d})'.center(COLUMN_WIDTH-1)
         out += f'{BAR}\n{mid_line}'
         header = BAR + 'ID'.center(JOB_ID_LENGTH) + ' ' + 'USER'.center(USER_ID_LENGTH) + ' ' + 'Job Name'.center(NAME_LENGTH) + ' S'
         out += f'{header*large_num}{BAR}\n{mid_line}'
@@ -112,7 +112,7 @@ class Queues:
         # Remove small queues for later use
         job_list = []
         small_queues = []
-        for name, queue in sorted(self.queues.items()):
+        for queue in self:
             if queue.size <= SMALL_QUEUE:
                 if queue.size > 0:
                     small_queues.append(queue)
