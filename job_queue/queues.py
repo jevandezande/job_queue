@@ -125,6 +125,7 @@ class Queues:
             out += mid_line
 
         blank = BAR + ' '*(COLUMN_WIDTH-1)
+        i = 0
         for i, job_row in enumerate(zip_longest(*job_list)):
             # Show how many more jobs are in each queue
             if i >= numjobs:
