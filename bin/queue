@@ -1,4 +1,4 @@
-#!/usr/bin env python3
+#!/usr/bin/env python3
 
 # Interacting with the grid engine
 import os
@@ -16,6 +16,8 @@ pause - hold all jobs currently queued
     pause `queue` - hold all jobs on specified queue
 resume - release all jobs currently queued
     resume `queue` - release all jobs on specified queue
+next - return job_id of next job
+current - return job_id of current job
 """
 
 if len(sys.argv) < 2:
@@ -23,7 +25,7 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 command, *args = sys.argv[1:]
-print(command)
+
 if command == 'pause':
     if len(args) > 1:
         raise SyntaxError("Too many arguments")
@@ -43,5 +45,14 @@ elif command == 'resume':
     else:
         queue = args[0]
         queue = cmds.release_jobs(queue=queue)
+
+elif command == 'current':
+    job_id = cmds.current_job_id()
+    print(job_id)
+
+elif command == 'next':
+    job_id, name, directory = cmds.next_job()
+    print(job_id, name, directory)
+
 else:
     print(f'Unknown command: {" ".join(sys.argv[1:])}')

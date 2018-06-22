@@ -1,7 +1,8 @@
-from subprocess import check_call
-from .queues import Queues
-
 import getpass
+
+from .queues import Queues
+from subprocess import check_call
+from os.path import expanduser
 
 
 def hold_job(*job_ids):
@@ -101,3 +102,38 @@ def filter_user_job_ids(job_ids, user=None):
     jfi = ge_queues.job_from_id
     return [id for id in job_ids if jfi(id).owner == user]
 
+
+def current_job_id():
+    """
+    Find current job in completed list
+    :return: job_id
+    """
+    with open(expanduser('~/.config/job_queue/completed_list_current')) as f:
+        return int(f.readline())
+
+
+def next_job():
+    """
+    Find next completed job
+    :return: job_id, name, directory
+    """
+    c_jid_match = f'{current_job_id()}:'
+    print(c_jid_match)
+    with open(expanduser('~/.config/job_queue/completed')) as f:
+        match = False
+        for line in f:
+            if c_jid_match == line[:len(c_jid_match)]:
+                match = True
+                break
+        if not match:
+            print('Cannot find job')
+            return None, None, None
+
+        try:
+            job_id, name, hyphen, directory = next(f).split()
+            job_id = job_id[:-1]  # strip colon
+        except StopIteration as e:
+            print('At last job')
+            return None, None, None
+
+        return job_id, name, directory
