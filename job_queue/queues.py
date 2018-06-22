@@ -285,7 +285,7 @@ class Queues:
                         # <Queue-List>
                         #   <name>gen3.q@v10.cl.ccqc.uga.edu</name>
                         name = node.find('name').text.split('@')[0]
-                        # If we don't want to display the queue
+                        # If we don't want to save the queue
                         if name in omit:
                             continue
                         if name not in self.queues:
@@ -299,12 +299,17 @@ class Queues:
                 elif child.tag == 'job_info':
                     for job_xml in child:
                         job = Job(job_xml, self.grid_engine)
-                        name = job.queue.split('@')[0]
+                        name = job.queue
                         if name in omit:
                             continue
+                        if name is None:
+                            name = 'Unassigned'
 
                         if name not in self.queues:
-                            self.queues[name] = Queue(self.sizes[name], name)
+                            if name == 'Unassigned':
+                                self.queues[name] = Queue(0, name)
+                            else:
+                                self.queues[name] = Queue(self.sizes[name], name)
 
                         self.queues[name].queueing[job.id] = job
         elif self.grid_engine == 'pbs':
@@ -511,7 +516,8 @@ class Queue:
 
         # Add blank spots to fill out to end
         if (len(jobs) + 1) % num_columns:
-            out += (' '*COLUMN_WIDTH*(num_columns - (len(jobs) + 1) % num_columns))[:-1] + BAR
+            blank = ' '*(COLUMN_WIDTH-1) + BAR
+            out += blank*(num_columns - (len(jobs) + 1) % num_columns)
         return out
 
     def set(self, job_id, job, position):
@@ -608,7 +614,7 @@ class Job:
         id = int(self.id)
 
         return job_form.format(id, owner, self.name[:NAME_LENGTH],
-                               job_colors[self.state], self.state[:2])
+                               job_colors[self.state], self.state[:1])
 
     @staticmethod
     def read_job_xml(job_xml, grid_engine):
@@ -641,6 +647,9 @@ class Job:
             if (results['state2'] == 'running' and results['state'] != 'r') or \
                     (results['state2'] == 'pending' and results['state'] != 'q'):
                 pass
+
+            results['queue'] = None
+            results['workdir'] = None
             return results
 
         elif grid_engine == 'pbs':
