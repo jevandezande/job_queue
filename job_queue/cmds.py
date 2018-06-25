@@ -3,6 +3,25 @@ import getpass
 from .queues import Queues
 from subprocess import check_call
 from os.path import expanduser
+from os import environ
+
+"""
+Collection of random commands that are needed in random places
+"""
+
+
+def grid_engine():
+    """
+    Determine the grid engine
+    """
+    engines = {
+            "PBS": "PBS_ROOT",
+            "SGE": "SGE_ROOT",
+    }
+    for prog, variable in engines.items():
+        if variable in environ:
+            return prog
+    return None
 
 
 def hold_job(*job_ids):
