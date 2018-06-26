@@ -5,6 +5,7 @@ import getpass
 import argparse
 import subprocess
 
+from .cmds import grid_engine
 from socket import gethostname
 from collections import OrderedDict
 
@@ -16,6 +17,7 @@ SUPPORTED_PROGRAMS = ['cfour', 'cfour_v2', 'nbo', 'orca3', 'orca', 'orca_current
 
 class SubmitJob:
     def __init__(self, options=None):
+        self.grid_engine = grid_engine()
         self.parse_config()
         self.set_defaults()
 
