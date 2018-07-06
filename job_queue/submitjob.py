@@ -10,7 +10,6 @@ from socket import gethostname
 from collections import OrderedDict
 
 from configparser import ConfigParser
-from job_queue import cmds
 
 
 SUPPORTED_PROGRAMS = [
@@ -25,6 +24,9 @@ SUPPORTED_GRID_ENGINES = ['PBS', 'SGE']
 class SubmitJob:
     def __init__(self, options=None):
         self.grid_engine = grid_engine()
+        if self.grid_engine not in SUPPORTED_GRID_ENGINES:
+            raise ValueError(f"Unable to run jobs with: {self.grid_engine}\n"
+                    f"Please use one of {SUPPORTED_GRID_ENGINES}")
         self.parse_config()
         self.set_defaults()
 
@@ -34,10 +36,6 @@ class SubmitJob:
 
         self.cwd = os.getcwd()
         self.get_host()
-        self.grid_engine = cmds.grid_engine()
-        if self.grid_engine not in SUPPORTED_GRID_ENGINES:
-            raise ValueError(f"Unable to run jobs with: {self.grid_engine}\n"
-                    f"Please use one of {SUPPORTED_GRID_ENGINES}")
         self.get_user()
         self.check_queue()
         self.select_input()
