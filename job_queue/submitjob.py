@@ -10,7 +10,7 @@ from socket import gethostname
 from collections import OrderedDict
 
 from configparser import ConfigParser
-+from job_queue import cmds
+from job_queue import cmds
 
 
 SUPPORTED_PROGRAMS = [
@@ -19,7 +19,7 @@ SUPPORTED_PROGRAMS = [
     'orca3', 'orca', 'orca_current', 'orca_local',
     'psi4',
 ]
-+SUPPORTED_GRID_ENGINES = ['PBS', 'SGE']
+SUPPORTED_GRID_ENGINES = ['PBS', 'SGE']
 
 
 class SubmitJob:
@@ -304,14 +304,14 @@ Default Options (as configured by .config/job_queue/config)
 
         pbs_options_str = f'#PBS -t 0-{self.job_array-1}' if self.job_array else ''
         pbs_options_str += '\n'.join(f'#PBS {f} {v}' for f, v in self.pbs_options.items())
-         # Some grid engines do the qsub flags differently
-         grid_engine_flag = {
-                 'PBS': 'PBS',
-                 'SGE': '$',
-         }[self.grid_engine]
+        # Some grid engines do the qsub flags differently
+        grid_engine_flag = {
+            'PBS': 'PBS',
+            'SGE': '$',
+        }[self.grid_engine]
 
-         options_str = f'#{grid_engine_flag} -t 0-{self.job_array-1}' if self.job_array else ''
-         options_str += '\n'.join(f'#{grid_engine_flag} {flag} {value}' for flag, value in self.grid_engine_options.items())
+        options_str = f'#{grid_engine_flag} -t 0-{self.job_array-1}' if self.job_array else ''
+        options_str += '\n'.join(f'#{grid_engine_flag} {flag} {value}' for flag, value in self.grid_engine_options.items())
 
         cleanup_func = f'''
 # Function to delete unnecessary files
@@ -410,10 +410,7 @@ nodes=$(sort -u ${self.grid_engine}_NODEFILE)
 
 export PATH=$tdir/orca:{mpi_path}:{orca_path}:${self.grid_engine}_O_PATH
 
-export LD_LIBRARY_PATH=$tdir/orca:{mpi_lib}\\
-    :/opt/intel/mkl/lib/intel64\\
-    :/opt/intel/lib/intel64\\
-    :$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$tdir/orca:{mpi_lib}:/opt/intel/mkl/lib/intel64:/opt/intel/lib/intel64:$LD_LIBRARY_PATH
 
 for node in $nodes;
 {{
