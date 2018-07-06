@@ -10,6 +10,7 @@ from socket import gethostname
 from collections import OrderedDict
 
 from configparser import ConfigParser
++from job_queue import cmds
 
 
 SUPPORTED_PROGRAMS = [
@@ -18,6 +19,7 @@ SUPPORTED_PROGRAMS = [
     'orca3', 'orca', 'orca_current', 'orca_local',
     'psi4',
 ]
++SUPPORTED_GRID_ENGINES = ['PBS', 'SGE']
 
 
 class SubmitJob:
@@ -32,6 +34,10 @@ class SubmitJob:
 
         self.cwd = os.getcwd()
         self.get_host()
+        self.grid_engine = cmds.grid_engine()
+        if self.grid_engine not in SUPPORTED_GRID_ENGINES:
+            raise ValueError(f"Unable to run jobs with: {self.grid_engine}\n"
+                    f"Please use one of {SUPPORTED_GRID_ENGINES}")
         self.get_user()
         self.check_queue()
         self.select_input()
@@ -154,12 +160,12 @@ Default Options (as configured by .config/job_queue/config)
 
         self.__dict__.update(my_options)
 
-        self.pbs_options = OrderedDict()
+        self.grid_engine_options = OrderedDict()
         if self.email and self.email != 'False':
             if self.email_address is None:
                 raise ValueError('No email address specified.')
-            self.pbs_options['-m'] = 'e'
-            self.pbs_options['-M'] = self.email_address
+            self.grid_engine_options['-m'] = 'e'
+            self.grid_engine_options['-M'] = self.email_address
 
     def check_options(self, options):
         """
@@ -238,7 +244,7 @@ Default Options (as configured by .config/job_queue/config)
             else:
                 self.input_root + '.out'
         # make full path
-        self.output = f'$PBS_O_WORKDIR/$PBS_ARRAYID/{self.output}'
+        self.output = f'${self.grid_engine}_O_WORKDIR/${self.grid_engine}_ARRAYID/{self.output}'
 
     def name_job(self):
         """
@@ -298,6 +304,14 @@ Default Options (as configured by .config/job_queue/config)
 
         pbs_options_str = f'#PBS -t 0-{self.job_array-1}' if self.job_array else ''
         pbs_options_str += '\n'.join(f'#PBS {f} {v}' for f, v in self.pbs_options.items())
+         # Some grid engines do the qsub flags differently
+         grid_engine_flag = {
+                 'PBS': 'PBS',
+                 'SGE': '$',
+         }[self.grid_engine]
+
+         options_str = f'#{grid_engine_flag} -t 0-{self.job_array-1}' if self.job_array else ''
+         options_str += '\n'.join(f'#{grid_engine_flag} {flag} {value}' for flag, value in self.grid_engine_options.items())
 
         cleanup_func = f'''
 # Function to delete unnecessary files
@@ -309,7 +323,7 @@ cleanup () {{
     {{
         cp $file data/
     }}
-    tar cvzf $PBS_O_WORKDIR/$PBS_ARRAYID/data.tgz data/
+    tar cvzf ${self.grid_engine}_O_WORKDIR/${self.grid_engine}_ARRAYID/data.tgz data/
 
     # Delete everything in the temporary directory
     for node in $nodes; {{ ssh $node "rm -rf $tdir" }}
@@ -320,7 +334,7 @@ cleanup () {{
 trap '
 "Job terminated from outer space!" >> {self.output}
 cleanup
-echo "$PBS_JOBID_int: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/failed
+echo "${self.grid_engine}_JOBID_int: {self.name} - ${self.grid_engine}_O_WORKDIR" >> $HOME/.config/job_queue/failed
 exit
 ' TERM
 '''
@@ -330,24 +344,24 @@ exit
 ##{'#'*len(self.program)}##'''
 
         sub_file = f"""#!/bin/zsh
-#PBS -S /bin/zsh
-#PBS -l nodes={self.nodes}:ppn={self.ppn}
-#PBS -l mem={self.memory}GB
-#PBS -l walltime={self.walltime}:00:00
-#PBS -q {self.queue}
-#PBS -j oe
-#PBS -e {error_file}
-#PBS -N {self.name}
-{pbs_options_str}
+#{grid_engine_flag} -S /bin/zsh
+#{grid_engine_flag} -l nodes={self.nodes}:ppn={self.ppn}
+#{grid_engine_flag} -l mem={self.memory}GB
+#{grid_engine_flag} -l walltime={self.walltime}:00:00
+#{grid_engine_flag} -q {self.queue}
+#{grid_engine_flag} -j oe
+#{grid_engine_flag} -e {error_file}
+#{grid_engine_flag} -N {self.name}
+{options_str}
 
 # Only the number part
-PBS_JOBID_int=$(echo $PBS_JOBID | cut -d '.' -f 1)
+{self.grid_engine}_JOBID_int=$(echo ${self.grid_engine}_JOBID | cut -d '.' -f 1)
 
 {program_header}
 
-if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
+if [ -z ${self.grid_engine}_ARRAYID ] || [ ${self.grid_engine}_ARRAYID = 0 ]
 then
-    echo "$PBS_JOBID_int: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/submitted
+    echo "${self.grid_engine}_JOBID_int: {self.name} - ${self.grid_engine}_O_WORKDIR" >> $HOME/.config/job_queue/submitted
 fi
 setopt EXTENDED_GLOB
 setopt NULL_GLOB
@@ -375,7 +389,7 @@ fi
 mkdir -p /scratch/{self.user}
 tdir=$(mktemp -d /scratch/{self.user}/{self.input_root}__XXXXXX)
 
-nodes=$(sort -u $PBS_NODEFILE)
+nodes=$(sort -u ${self.grid_engine}_NODEFILE)
 """
         if 'orca' in self.program:
             orca_paths = {
@@ -394,7 +408,7 @@ nodes=$(sort -u $PBS_NODEFILE)
             self.nodes = 1
             sub_file += f"""
 
-export PATH=$tdir/orca:{mpi_path}:{orca_path}:$PBS_O_PATH
+export PATH=$tdir/orca:{mpi_path}:{orca_path}:${self.grid_engine}_O_PATH
 
 export LD_LIBRARY_PATH=$tdir/orca:{mpi_lib}\\
     :/opt/intel/mkl/lib/intel64\\
@@ -411,9 +425,9 @@ for node in $nodes;
 export NBOEXE=$tdir/orca/nbo6.exe
 export GENEXE=$tdir/orca/gennbo.exe
 
-cp $PBS_O_WORKDIR/$PBS_ARRAYID/{self.input_root}.* $tdir
+cp ${self.grid_engine}_O_WORKDIR/${self.grid_engine}_ARRAYID/{self.input_root}.* $tdir
 
-cd $PBS_O_WORKDIR/$PBS_ARRAYID/
+cd ${self.grid_engine}_O_WORKDIR/${self.grid_engine}_ARRAYID/
 for file in {moinp_files_array} {xyz_files_array}\
     *.gbw *.pc *.opt *.hess *.rrhess *.bas *.pot *.rno *.LJ *.LJ.Excl;
 {{
@@ -425,9 +439,9 @@ cd $tdir
 {trap}
 
 echo "Start: $(date)
-Job running on $PBS_O_HOST, running $(which orca) copied from {orca_path} on $(hostname) in $tdir
+Job running on ${self.grid_engine}_O_HOST, running $(which orca) copied from {orca_path} on $(hostname) in $tdir
 Shared library path: $LD_LIBRARY_PATH
-PBS Job ID $PBS_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
+{self.grid_engine} Job ID ${self.grid_engine}_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 # = calls full path in zsh
@@ -440,11 +454,11 @@ echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 export NBOEXE=$tdir/orca/nbo6.exe
 export GENEXE=$tdir/orca/gennbo.exe
 
-cp $PBS_O_WORKDIR/$PBS_ARRAYID/{self.input_root}.* $tdir/
+cp ${self.grid_engine}_O_WORKDIR/${self.grid_engine}_ARRAYID/{self.input_root}.* $tdir/
 cd $tdir
 echo "Start: $(date)
-Job running on $PBS_O_HOST, running $(which gennbo.exe) on $(hostname) in $tdir
-PBS Job ID $PBS_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
+Job running on ${self.grid_engine}_O_HOST, running $(which gennbo.exe) on $(hostname) in $tdir
+{self.grid_engine} Job ID ${self.grid_engine}_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 gennbo.exe < {self.input} > {self.output}
@@ -453,7 +467,7 @@ gennbo.exe < {self.input} > {self.output}
         elif self.program[:5] == 'cfour':
             cfour_path = f'/home1/vandezande/.install/{self.program}'
             inp_files = ''
-            start_dir = '$PBS_O_WORKDIR/$PBS_ARRAYID/'
+            start_dir = '${self.grid_engine}_O_WORKDIR/${self.grid_engine}_ARRAYID/'
             sub_file += f"""
 ##################
 # CFour specific #
@@ -485,8 +499,8 @@ cd $tdir
 ###############
 
 echo "Start: $(date)
-Job running on $PBS_O_HOST, running $(which xcfour) on $(hostname) in $tdir
-PBS Job ID $PBS_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
+Job running on ${self.grid_engine}_O_HOST, running $(which xcfour) on $(hostname) in $tdir
+{self.grid_engine} Job ID ${self.grid_engine}_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 xcfour {self.input} >>& {self.output}
@@ -496,7 +510,7 @@ echo "Finished"
         elif self.program == 'psi4':
             psi4 = '/home1/vandezande/.bin/psi4'
             inp_files = ''
-            start_dir = '$PBS_O_WORKDIR/$PBS_ARRAYID/'
+            start_dir = '${self.grid_engine}_O_WORKDIR/${self.grid_engine}_ARRAYID/'
             sub_file += f"""
 #################
 # Psi4 specific #
@@ -517,8 +531,8 @@ pwd
 ###############
 
 echo "Start: $(date)
-Job running on $PBS_O_HOST, running $(which {psi4}) on $(hostname) in $tdir
-PBS Job ID $PBS_JOBID is running on $(echo $a | wc -l) nodes:" >> {self.output}
+Job running on ${self.grid_engine}_O_HOST, running $(which {psi4}) on $(hostname) in $tdir
+{self.grid_engine} Job ID ${self.grid_engine}_JOBID is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 {psi4} -i {self.input} -o {self.output}
@@ -535,9 +549,9 @@ echo "Finished"
 cleanup
 
 # At job to log of completed jobs
-if [ -z $PBS_ARRAYID ] || [ $PBS_ARRAYID = 0 ]
+if [ -z ${self.grid_engine}_ARRAYID ] || [ ${self.grid_engine}_ARRAYID = 0 ]
 then
-    echo "$PBS_JOBID_int: {self.name} - $PBS_O_WORKDIR" >> $HOME/.config/job_queue/completed
+    echo "${self.grid_engine}_JOBID_int: {self.name} - ${self.grid_engine}_O_WORKDIR" >> $HOME/.config/job_queue/completed
 fi"""
 
         self.sub_script_name = 'job.zsh'
