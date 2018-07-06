@@ -12,7 +12,12 @@ from collections import OrderedDict
 from configparser import ConfigParser
 
 
-SUPPORTED_PROGRAMS = ['cfour', 'cfour_v2', 'nbo', 'orca3', 'orca', 'orca_current', 'psi4']
+SUPPORTED_PROGRAMS = [
+    'cfour', 'cfour_v2',
+    'nbo',
+    'orca3', 'orca', 'orca_current', 'orca_local',
+    'psi4',
+]
 
 
 class SubmitJob:
@@ -377,6 +382,7 @@ nodes=$(sort -u $PBS_NODEFILE)
                 'orca':         '/opt/orca',
                 'orca_current': '/opt/orca_current',
                 'orca3':        '/home1/vandezande/progs/orca_3',
+                'orca_local':        '/home1/vandezande/progs/orca',
             }
             orca_path = orca_paths[self.program]
             mpi_path = '/opt/openmpi_1.10.2/bin'
