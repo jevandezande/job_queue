@@ -300,8 +300,6 @@ Default Options (as configured by .config/job_queue/config)
         qsubopt = ''
         error_file = 'error'
 
-        pbs_options_str = f'#PBS -t 0-{self.job_array-1}' if self.job_array else ''
-        pbs_options_str += '\n'.join(f'#PBS {f} {v}' for f, v in self.pbs_options.items())
         # Some grid engines do the qsub flags differently
         grid_engine_flag = {
             'PBS': 'PBS',
