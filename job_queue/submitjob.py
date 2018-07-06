@@ -273,7 +273,7 @@ Default Options (as configured by .config/job_queue/config)
             self.memory = math.ceil(core_memory * self.nprocs)
 
         if self.nprocs % self.nodes:
-            raise Exception(f'Cannot divide {self.nprocs} processes evenly between {self.nodes} nodes.')
+            raise Exception(f'Cannot divide {self.nprocs} processes evenly by {self.nodes} nodes.')
         self.ppn = int(self.nprocs/self.nodes)
 
     def select_important_files(self):
@@ -297,7 +297,7 @@ Default Options (as configured by .config/job_queue/config)
         error_file = 'error'
 
         pbs_options_str = f'#PBS -t 0-{self.job_array-1}' if self.job_array else ''
-        pbs_options_str += '\n'.join(f'#PBS {flag} {value}' for flag, value in self.pbs_options.items())
+        pbs_options_str += '\n'.join(f'#PBS {f} {v}' for f, v in self.pbs_options.items())
 
         cleanup_func = f'''
 # Function to delete unnecessary files
@@ -396,7 +396,10 @@ nodes=$(sort -u $PBS_NODEFILE)
 
 export PATH=$tdir/orca:{mpi_path}:{orca_path}:$PBS_O_PATH
 
-export LD_LIBRARY_PATH=$tdir/orca:{mpi_lib}:/opt/intel/mkl/lib/intel64:/opt/intel/lib/intel64:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$tdir/orca:{mpi_lib}\\
+    :/opt/intel/mkl/lib/intel64\\
+    :/opt/intel/lib/intel64\\
+    :$LD_LIBRARY_PATH
 
 for node in $nodes;
 {{
@@ -411,7 +414,8 @@ export GENEXE=$tdir/orca/gennbo.exe
 cp $PBS_O_WORKDIR/$PBS_ARRAYID/{self.input_root}.* $tdir
 
 cd $PBS_O_WORKDIR/$PBS_ARRAYID/
-for file in {moinp_files_array} {xyz_files_array} *.gbw *.pc *.opt *.hess *.rrhess *.bas *.pot *.rno *.LJ *.LJ.Excl;
+for file in {moinp_files_array} {xyz_files_array}\
+    *.gbw *.pc *.opt *.hess *.rrhess *.bas *.pot *.rno *.LJ *.LJ.Excl;
 {{
     cp -v $file $tdir >>& {self.output}
 }}
