@@ -330,7 +330,7 @@ cleanup () {{
 trap '
 "Job terminated from outer space!" >> {self.output}
 cleanup
-echo "${self.grid_engine}_JOBID_int: {self.name} - ${self.grid_engine}_O_WORKDIR" >> $HOME/.config/job_queue/failed
+echo "$JOBID_int: {self.name} - ${self.grid_engine}_O_WORKDIR" >> $HOME/.config/job_queue/failed
 exit
 ' TERM
 '''
@@ -351,13 +351,13 @@ exit
 {options_str}
 
 # Only the number part
-{self.grid_engine}_JOBID_int=$(echo ${self.grid_engine}_JOBID | cut -d '.' -f 1)
+JOBID_int=$(echo ${self.grid_engine}_JOBID | cut -d '.' -f 1)
 
 {program_header}
 
 if [ -z ${self.grid_engine}_ARRAYID ] || [ ${self.grid_engine}_ARRAYID = 0 ]
 then
-    echo "${self.grid_engine}_JOBID_int: {self.name} - ${self.grid_engine}_O_WORKDIR" >> $HOME/.config/job_queue/submitted
+    echo "$JOBID_int: {self.name} - ${self.grid_engine}_O_WORKDIR" >> $HOME/.config/job_queue/submitted
 fi
 setopt EXTENDED_GLOB
 setopt NULL_GLOB
@@ -434,7 +434,7 @@ cd $tdir
 echo "Start: $(date)
 Job running on ${self.grid_engine}_O_HOST, running $(which orca) copied from {orca_path} on $(hostname) in $tdir
 Shared library path: $LD_LIBRARY_PATH
-{self.grid_engine} Job ID ${self.grid_engine}_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
+{self.grid_engine} Job ID $JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 # = calls full path in zsh
@@ -451,7 +451,7 @@ cp ${self.grid_engine}_O_WORKDIR/${self.grid_engine}_ARRAYID/{self.input_root}.*
 cd $tdir
 echo "Start: $(date)
 Job running on ${self.grid_engine}_O_HOST, running $(which gennbo.exe) on $(hostname) in $tdir
-{self.grid_engine} Job ID ${self.grid_engine}_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
+{self.grid_engine} Job ID $JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 gennbo.exe < {self.input} > {self.output}
@@ -493,7 +493,7 @@ cd $tdir
 
 echo "Start: $(date)
 Job running on ${self.grid_engine}_O_HOST, running $(which xcfour) on $(hostname) in $tdir
-{self.grid_engine} Job ID ${self.grid_engine}_JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
+{self.grid_engine} Job ID $JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 xcfour {self.input} >>& {self.output}
@@ -525,7 +525,7 @@ pwd
 
 echo "Start: $(date)
 Job running on ${self.grid_engine}_O_HOST, running $(which {psi4}) on $(hostname) in $tdir
-{self.grid_engine} Job ID ${self.grid_engine}_JOBID is running on $(echo $a | wc -l) nodes:" >> {self.output}
+{self.grid_engine} Job ID $JOBID_int is running on $(echo $a | wc -l) nodes:" >> {self.output}
 echo $nodes | tr "\\n" ", " |  sed "s|,$|\\n|" >> {self.output}
 
 {psi4} -i {self.input} -o {self.output}
@@ -544,7 +544,7 @@ cleanup
 # At job to log of completed jobs
 if [ -z ${self.grid_engine}_ARRAYID ] || [ ${self.grid_engine}_ARRAYID = 0 ]
 then
-    echo "${self.grid_engine}_JOBID_int: {self.name} - ${self.grid_engine}_O_WORKDIR" >> $HOME/.config/job_queue/completed
+    echo "$JOBID_int: {self.name} - ${self.grid_engine}_O_WORKDIR" >> $HOME/.config/job_queue/completed
 fi"""
 
         self.sub_script_name = 'job.zsh'
