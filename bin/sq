@@ -3,12 +3,10 @@
 # import various programs here
 
 import argparse
-import importlib
 import subprocess
-import programs
 import logging
 import os
-from qgrep.helper import check_program
+import importlib
 
 program_input_files = {
     "cfour": "ZMAT",
@@ -19,6 +17,7 @@ program_input_files = {
     "psi4": "input.dat",
     "qchem": "input.dat",
 }
+
 
 def qsub(sub_file):
     """
@@ -37,7 +36,7 @@ def read_args():
                         type=str, default="find")
     parser.add_argument("-n", "--name", help="Job name", type=str)
     parser.add_argument("-V", "--version", help="Version", type=str)
-    
+
     return parser.parse_args()
 
 
@@ -49,8 +48,8 @@ def find_args(program="find", in_file="find"):
     if program == "find" and in_file == "find":
         logging.debug("No program or file given")
         # Look in various places
-        for guess_in_file in ["input.inp", "input.dat", "ZMAT", "input.47"]
-            if os.path.isfile(in_file)
+        for guess_in_file in ["input.inp", "input.dat", "ZMAT", "input.47"]:
+            if os.path.isfile(in_file):
                 guess_program = find_input_program(in_file)
                 if guess_program is not None:
                     logging.debug(f"Found program: {guess_program}\n")
@@ -70,8 +69,8 @@ def find_args(program="find", in_file="find"):
         guess_in_file = program_input_files[program]
         if not os.isfile(guess_in_file):
             raise Exception(f"Cannot find input file for {program=}")
-        
-        guess_program = find_input_program(in_file):
+
+        guess_program = find_input_program(in_file)
         if guess_program is None:
             logging.debug("Cannot find program type, blindly trusting user.")
         elif program_input_files[guess_program] != in_file:
@@ -80,8 +79,8 @@ def find_args(program="find", in_file="find"):
         return program, guess_in_file
     else:
         # Must be unsupported program, or garbage
-        raise Exception(f"{program} is not yet supported; please use one of the following programs\n{', '.join(program_input_files)))}"
-                        .
+        raise Exception(f"{program} is not yet supported; please use one of the following programs\n"
+                        "{', '.join(program_input_files)))}")
 
 
 def check_in_file():
@@ -92,6 +91,6 @@ def run():
     args = read_args()
     program, in_file = find_args(args.program, args.in_file)
     check_in_file(in_file)
-    mod = import_lib.import_module(program)
-    zsh_name = mod.write_zsh(version)
+    mod = importlib.import_module(program)
+    zsh_name = mod.write_zsh(args.version)
     qsub(zsh_name)
