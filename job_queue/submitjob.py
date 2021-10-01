@@ -26,7 +26,7 @@ class SubmitJob:
         self.grid_engine = grid_engine()
         if self.grid_engine not in SUPPORTED_GRID_ENGINES:
             raise ValueError(f"Unable to run jobs with: {self.grid_engine}\n"
-                    f"Please use one of {SUPPORTED_GRID_ENGINES}")
+                             f"Please use one of {SUPPORTED_GRID_ENGINES}")
         self.parse_config()
         self.set_defaults()
 
@@ -307,7 +307,7 @@ Default Options (as configured by .config/job_queue/config)
         }[self.grid_engine]
 
         options_str = f'#{grid_engine_flag} -t 0-{self.job_array-1}' if self.job_array else ''
-        options_str += '\n'.join(f'#{grid_engine_flag} {flag} {value}' for flag, value in self.grid_engine_options.items())
+        options_str += '\n'.join(f'#{grid_engine_flag} {f} {v}' for f, v in self.grid_engine_options.items())
 
         cleanup_func = f'''
 # Function to delete unnecessary files

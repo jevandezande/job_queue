@@ -16,14 +16,14 @@ config.read(config_file)
 
 
 class colors:
-    normal = '\033[0m'
-    bold = '\033[1m'
-    underline = '\033[4m'
-    red = '\033[91m'
-    green = '\033[92m'
-    yellow = '\033[93m'
-    blue = '\033[94m'
-    purple = '\033[95m'
+    normal = r'\033[0m'
+    bold = r'\033[1m'
+    underline = r'\033[4m'
+    red = r'\033[91m'
+    green = r'\033[92m'
+    yellow = r'\033[93m'
+    blue = r'\033[94m'
+    purple = r'\033[95m'
 
 
 BAR = colors.purple + '│' + colors.normal
@@ -132,7 +132,7 @@ class Queues:
                 user = 'User ' if person else ''
                 for queue in job_list:
                     if len(queue) > numjobs:
-                        out += BAR + f'\033[1m{len(queue) - numjobs: >+5} {user} jobs\033[0m'.center(COLUMN_WIDTH+7)
+                        out += BAR + f'\033[1m{len(queue) - numjobs: >+5} {user} jobs\033[0m'.center(COLUMN_WIDTH + 7)
                     else:
                         out += blank
                 out += BAR + '\n'
@@ -146,7 +146,7 @@ class Queues:
             # Add how many other jobs are in each queue
             for queue, queue_jobs in zip(self, job_list):
                 if len(queue) > i:
-                    out += BAR + f'\033[1m{len(queue) - len(queue_jobs) - 1: >+5} Other jobs\033[0m'.center(COLUMN_WIDTH+7)
+                    out += BAR + f'\033[1m{len(queue) - len(queue_jobs) - 1: >+5} Other jobs\033[0m'.center(COLUMN_WIDTH + 7)
                 else:
                     out += blank
             out += BAR + '\n'
