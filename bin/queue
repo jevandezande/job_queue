@@ -26,7 +26,7 @@ if len(sys.argv) < 2:
 
 command, *args = sys.argv[1:]
 
-if command == 'pause':
+if command in ['p', 'pause']:
     if len(args) > 1:
         raise SyntaxError("Too many arguments")
 
@@ -36,7 +36,7 @@ if command == 'pause':
         queue = args[0]
         queue = cmds.holds_jobs(queue=queue)
 
-elif command == 'resume':
+elif command in ['r', 'resume']:
     if len(args) > 1:
         raise SyntaxError("Too many arguments")
 
@@ -46,11 +46,11 @@ elif command == 'resume':
         queue = args[0]
         queue = cmds.release_jobs(queue=queue)
 
-elif command == 'current':
+elif command in ['c', 'current']:
     job_id = cmds.current_job_id()
     print(job_id)
 
-elif command == 'next':
+elif command in ['n', 'next']:
     job_id, name, directory = cmds.next_job()
     print(job_id, name, directory)
 
