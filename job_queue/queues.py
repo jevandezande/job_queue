@@ -32,10 +32,12 @@ USER_ID_LENGTH = 5
 NAME_LENGTH = 22
 SMALL_QUEUE = 3
 if 'queues' in config:
-    JOB_ID_LENGTH = max(config['queues'].getint('job_id_length', 7), 4)
-    USER_ID_LENGTH = max(config['queues'].getint('user_id_length', 5), 4)
-    NAME_LENGTH = max(config['queues'].getint('name_length', 22), 8)
-    SMALL_QUEUE = max(config['queues'].getint('small_queue', 3), 1)
+    queues = config['queues']
+    JOB_ID_LENGTH = max(queues.getint('job_id_length', 7), 4)
+    USER_ID_LENGTH = max(queues.getint('user_id_length', 5), 4)
+    NAME_LENGTH = max(queues.getint('name_length', 22), 8)
+    SMALL_QUEUE = max(queues.getint('small_queue', 3), 1)
+    OMIT_QUEUES = queues.get("omit_queues", "").split()
 COLUMN_WIDTH = JOB_ID_LENGTH + USER_ID_LENGTH + NAME_LENGTH + 5
 
 
@@ -43,7 +45,7 @@ class Queues:
     """
     A class to display the results of a grid engine
     """
-    def __init__(self, omit=None):
+    def __init__(self, omit=OMIT_QUEUES):
         self.omit = omit if omit else []
         self.queues = {}
         self.grid_engine, self.tree = self.qxml()
