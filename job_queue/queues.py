@@ -16,14 +16,14 @@ config.read(config_file)
 
 
 class colors:
-    normal = r'\033[0m'
-    bold = r'\033[1m'
-    underline = r'\033[4m'
-    red = r'\033[91m'
-    green = r'\033[92m'
-    yellow = r'\033[93m'
-    blue = r'\033[94m'
-    purple = r'\033[95m'
+    normal = '\033[0m'
+    bold = '\033[1m'
+    underline = '\033[4m'
+    red = '\033[91m'
+    green = '\033[92m'
+    yellow = '\033[93m'
+    blue = '\033[94m'
+    purple = '\033[95m'
 
 
 BAR = colors.purple + '│' + colors.normal
@@ -91,9 +91,9 @@ class Queues:
             pass
 
         # Horizontal line (uses box drawing characters)
-        top_line = '\033[95m' + '┌' + '┬'.join(['─'*(COLUMN_WIDTH - 1)]*num_columns) + '┐' + '\033[0m\n'
-        mid_line = '\033[95m' + '├' + '┼'.join(['─'*(COLUMN_WIDTH - 1)]*num_columns) + '┤' + '\033[0m\n'
-        bot_line = '\033[95m' + '└' + '┴'.join(['─'*(COLUMN_WIDTH - 1)]*num_columns) + '┘' + '\033[0m\n'
+        top_line = f'{colors.purple}┌' + '┬'.join(['─'*(COLUMN_WIDTH - 1)]*num_columns) + f'┐{colors.normal}\n'
+        mid_line = f'{colors.purple}├' + '┼'.join(['─'*(COLUMN_WIDTH - 1)]*num_columns) + f'┤{colors.normal}\n'
+        bot_line = f'{colors.purple}└' + '┴'.join(['─'*(COLUMN_WIDTH - 1)]*num_columns) + f'┘{colors.normal}\n'
 
         out = top_line
 
