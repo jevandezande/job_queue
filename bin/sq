@@ -42,7 +42,7 @@ def read_args():
 
 def find_args(program="find", in_file="find"):
     """
-    Find the appropraite program and/or input file
+    Find the appropriate program and/or input file
     :return: program, input file
     """
     if program == "find" and in_file == "find":

@@ -13,8 +13,8 @@ from job_queue.queues import Queues
 parser = argparse.ArgumentParser(description="""\
 Get information about the queues.
 
-The header is interpretted as 'queue_name (#running_jobs/#slots/#queued_jobs)'
-For PBS the #slots corresponds to the number of proccessors available, while
+The header is interpreted as 'queue_name (#running_jobs/#slots/#queued_jobs)'
+For PBS the #slots corresponds to the number of processors available, while
 for SGE it corresponds to the number of nodes available.
 """)
 parser.add_argument('-n', '--number', help='The number of jobs to be output.',
