@@ -30,10 +30,8 @@ def qsub(sub_file):
 
 def read_args():
     parser = argparse.ArgumentParser(description="Submits a job to the queue")
-    parser.add_argument("-i", "--input", help="The input file", type=str,
-                        default="find")
-    parser.add_argument("-p", "--program", help="The program to be run",
-                        type=str, default="find")
+    parser.add_argument("-i", "--input", help="The input file", type=str, default="find")
+    parser.add_argument("-p", "--program", help="The program to be run", type=str, default="find")
     parser.add_argument("-n", "--name", help="Job name", type=str)
     parser.add_argument("-V", "--version", help="Version", type=str)
 
@@ -79,8 +77,10 @@ def find_args(program="find", in_file="find"):
         return program, guess_in_file
     else:
         # Must be unsupported program, or garbage
-        raise Exception(f"{program} is not yet supported; please use one of the following programs\n"
-                        "{', '.join(program_input_files)))}")
+        raise Exception(
+            f"{program} is not yet supported; please use one of the following programs\n"
+            "{', '.join(program_input_files)))}"
+        )
 
 
 def check_in_file():

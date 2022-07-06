@@ -32,7 +32,7 @@ def hold_job(*job_ids):
     Warning: if job does not exist or cannot be held, no notice is given
     """
     for id in job_ids:
-        check_call(f'qhold {id}', shell=True)
+        check_call(f"qhold {id}", shell=True)
 
 
 def release_job(*job_ids):
@@ -42,10 +42,10 @@ def release_job(*job_ids):
     Warning: if job does not exist or cannot be released, no notice is given
     """
     for id in job_ids:
-        check_call(f'qrls {id}', shell=True)
+        check_call(f"qrls {id}", shell=True)
 
 
-def hold_jobs(jobs='queueing', queues='all'):
+def hold_jobs(jobs="queueing", queues="all"):
     """
     Hold defined jobs (safer wrapper to hold_job)
     :param jobs: 'queueing' or list corresponding to jobs to hold
@@ -56,9 +56,9 @@ def hold_jobs(jobs='queueing', queues='all'):
     ge_queues = Queues()
 
     # Find all jobs that match
-    if jobs == 'queueing':
+    if jobs == "queueing":
         jobs = []
-        if queues == 'all':
+        if queues == "all":
             jobs = ge_queues.queueing.keys()
         else:
             for queue in queues:
@@ -78,7 +78,7 @@ def hold_jobs(jobs='queueing', queues='all'):
     hold_job(*found_jobs)
 
 
-def release_jobs(jobs='holding', queues='all'):
+def release_jobs(jobs="holding", queues="all"):
     """
     Release defined jobs (safer wrapper to release_job)
     :param jobs: 'queueing' or list corresponding to jobs to release
@@ -89,9 +89,9 @@ def release_jobs(jobs='holding', queues='all'):
     ge_queues = Queues()
 
     # Find all jobs that match
-    if jobs == 'holding':
+    if jobs == "holding":
         jobs = []
-        if queues == 'all':
+        if queues == "all":
             jobs = ge_queues.holding.keys()
         else:
             for queue in queues:
@@ -128,7 +128,7 @@ def current_job_id():
     Find current job in completed list
     :return: job_id
     """
-    with open(expanduser('~/.config/job_queue/completed_list_current')) as f:
+    with open(expanduser("~/.config/job_queue/completed_list_current")) as f:
         return int(f.readline())
 
 
@@ -137,23 +137,23 @@ def next_job():
     Find next completed job
     :return: job_id, name, directory
     """
-    c_jid_match = f'{current_job_id()}:'
+    c_jid_match = f"{current_job_id()}:"
     print(c_jid_match)
-    with open(expanduser('~/.config/job_queue/completed')) as f:
+    with open(expanduser("~/.config/job_queue/completed")) as f:
         match = False
         for line in f:
-            if c_jid_match == line[:len(c_jid_match)]:
+            if c_jid_match == line[: len(c_jid_match)]:
                 match = True
                 break
         if not match:
-            print('Cannot find job')
+            print("Cannot find job")
             return None, None, None
 
         try:
             job_id, name, hyphen, directory = next(f).split()
             job_id = job_id[:-1]  # strip colon
         except StopIteration as e:
-            print('At last job')
+            print("At last job")
             return None, None, None
 
         return job_id, name, directory
