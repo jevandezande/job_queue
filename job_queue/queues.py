@@ -4,10 +4,10 @@ import getpass
 import subprocess
 import os.path
 
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 from xml.etree import ElementTree
 
-from itertools import zip_longest
+from itertools import chain, zip_longest
 from configparser import ConfigParser
 
 config_file = os.path.join(os.path.expanduser("~"), '.config', 'job_queue', 'config')
@@ -279,7 +279,7 @@ class Queues:
         omit = omit if omit else []
 
         if self.grid_engine == 'sge':
-            self.queues = OrderedDict()
+            self.queues = {}
             for child in self.tree:
                 # Running jobs are arranged by node/queue
                 if child.tag == 'queue_info':
@@ -315,7 +315,7 @@ class Queues:
 
                         self.queues[name].queueing[job.id] = job
         elif self.grid_engine == 'pbs':
-            self.queues = OrderedDict()
+            self.queues = {}
             for job_xml in self.tree:
                 job = Job(job_xml, self.grid_engine)
                 queue = job.queue
@@ -408,31 +408,19 @@ izeussn153
 
     @property
     def jobs(self):
-        jobs = []
-        for queue in self:
-            jobs += list(queue.jobs.items())
-        return OrderedDict(jobs)
+        return dict(chain.from_iterable(queue.items() for queue in self))
 
     @property
     def running(self):
-        jobs = []
-        for queue in self:
-            jobs += list(queue.running.items())
-        return OrderedDict(jobs)
+        return dict(chain.from_iterable(queue.running.items() for queue in self))
 
     @property
     def queueing(self):
-        jobs = []
-        for queue in self:
-            jobs += list(queue.queueing.items())
-        return OrderedDict(jobs)
+        return dict(chain.from_iterable(queue.queueing.items() for queue in self))
 
     @property
     def holding(self):
-        jobs = []
-        for queue in self:
-            jobs += list(queue.holding.items())
-        return OrderedDict(jobs)
+        return dict(chain.from_iterable(queue.holding.items() for queue in self))
 
 
 class Queue:
@@ -443,23 +431,13 @@ class Queue:
         """
         Initialize a queue with its jobs
 
-        :param running: an OrderedDict of Jobs that are running
-        :param queueing: an OrderedDict of Jobs that are queueing (includes holding)
+        :param running: Jobs that are running
+        :param queueing: Jobs that are queueing (includes holding)
         """
         self.size = size
         self.name = name
-        if running is None:
-            self.running = OrderedDict()
-        elif isinstance(running, OrderedDict()):
-            self.running = running
-        else:
-            raise TypeError(f'Expected running to be an OrderedDict, got: {type(running)}')
-        if queueing is None:
-            self.queueing = OrderedDict()
-        elif isinstance(queueing, OrderedDict()):
-            self.queueing = queueing
-        else:
-            raise TypeError(f'Expected queueing to be an OrderedDict, got: {type(queueing)}')
+        self.running = running or {}
+        self.queueing = queueing or {}
 
     def __eq__(self, other):
         if len(self) != len(other):
@@ -550,29 +528,19 @@ class Queue:
     @property
     def holding(self):
         """ Jobs on hold (also included in queueing) """
-        return OrderedDict([(id, job) for id, job in self.queueing.items() if job.state == 'h'])
+        return {id: job for id, job in self.queueing.items() if job.state == 'h'}
 
     @property
     def jobs(self):
-        """ Makes an OrderedDict of all Jobs (running and queueing (including holding)) """
-        ret = OrderedDict()
-        # OrderedDicts cannot be readily combined
-        for k, v in sorted(self.running.items()):
-            ret[k] = v
-        for k, v in sorted(self.queueing.items()):
-            ret[k] = v
-        return ret
+        """ Make a dictionary of all Jobs (running and queueing (including holding)) """
+        return dict(sorted(self.running.items()) + sorted(self.queueing.items()))
 
     def person_jobs(self, person):
-        """ Return an OrderedDict of Jobs with the specified owner """
+        """ Make a dictionary of Jobs with the specified owner """
         if not person:
             return self.jobs
 
-        ret = OrderedDict()
-        for job in self.jobs.values():
-            if job.owner == person:
-                ret[job.id] = job
-        return ret
+        return {id: job for id, job in self.jobs.items() if job.owner == person}
 
 
 class Job:

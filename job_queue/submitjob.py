@@ -7,7 +7,6 @@ import subprocess
 
 from .cmds import grid_engine
 from socket import gethostname
-from collections import OrderedDict
 
 from configparser import ConfigParser
 
@@ -158,7 +157,7 @@ Default Options (as configured by .config/job_queue/config)
 
         self.__dict__.update(my_options)
 
-        self.grid_engine_options = OrderedDict()
+        self.grid_engine_options = {}
         if self.email and self.email != 'False':
             if self.email_address is None:
                 raise ValueError('No email address specified.')
