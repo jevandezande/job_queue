@@ -282,12 +282,12 @@ class Queues:
             try:
                 xml = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL)
                 return grid_engine, ElementTree.fromstring(xml)
-            except FileNotFoundError as e:
-                raise Exception("Could not find qstat")
-            except subprocess.CalledProcessError as e:
+            except FileNotFoundError:
+                raise RuntimeError("Could not find qstat")
+            except subprocess.CalledProcessError:
                 pass
 
-        raise Exception("Could not generate XML, only PBS and SGE currently supported.")
+        raise ValueError("Could not generate XML, only PBS and SGE currently supported.")
 
     def parse_tree(self, omit=None):
         """
@@ -352,7 +352,7 @@ class Queues:
                         print(job)
                         raise
         else:
-            raise Exception("Could not read XML, only PBS and SGE currently supported.")
+            raise ValueError("Could not read XML, only PBS and SGE currently supported.")
 
     def find_sizes(self, omit=None):
         """
@@ -413,7 +413,7 @@ izeussn153
                     else:
                         self.sizes[queue] = np
         else:
-            raise Exception("Could not read queue sizes, only PBS and SGE currently supported.")
+            raise ValueError("Could not read queue sizes, only PBS and SGE currently supported.")
 
     def job_from_id(self, id):
         """
@@ -525,7 +525,7 @@ class Queue:
         elif position == "queueing":
             self.queueing[job_id] = job
         else:
-            raise Exception("Invalid position, must be either running or queueing.")
+            raise ValueError("Invalid position, must be either running or queueing.")
 
     @property
     def used(self):
@@ -683,10 +683,10 @@ class Job:
 
             return results
         else:
-            raise Exception("Could not read XML, only PBS and SGE currently supported.")
+            raise ValueError("Could not read XML, only PBS and SGE currently supported.")
 
 
-def cut_and_pad(in_str, cut):
+def cut_and_pad(in_str: str, cut: int):
     """
     Cut the string to `cut`. If not that long, pad it
     """

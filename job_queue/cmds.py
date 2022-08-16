@@ -57,12 +57,13 @@ def hold_jobs(jobs="queueing", queues="all"):
 
     # Find all jobs that match
     if jobs == "queueing":
-        jobs = []
         if queues == "all":
             jobs = ge_queues.queueing.keys()
         else:
-            for queue in queues:
-                jobs += ge_queues.queues[queue].queueing.keys()
+            jobs = [
+                ge_queues.queues[queue].queueing.keys()
+                for queue in queues
+            ]
 
         # Only user's jobs (they can't mess with the jobs of others)
         jobs = filter_user_job_ids(jobs)
@@ -90,12 +91,13 @@ def release_jobs(jobs="holding", queues="all"):
 
     # Find all jobs that match
     if jobs == "holding":
-        jobs = []
         if queues == "all":
             jobs = ge_queues.holding.keys()
         else:
-            for queue in queues:
-                jobs += ge_queues.queues[queue].holding.keys()
+            jobs = [
+                ge_queues.queues[queue].holding.keys()
+                for queue in queues
+            ]
 
         # Only user's jobs (they can't mess with the jobs of others)
         jobs = filter_user_job_ids(jobs)
@@ -116,8 +118,7 @@ def filter_user_job_ids(job_ids, user=None):
     :param user: user, if None, selects current user
     """
     ge_queues = Queues()
-    if user is None:
-        user = getpass.getuser()
+    user = user or getpass.getuser()
 
     jfi = ge_queues.job_from_id
     return [id for id in job_ids if jfi(id).owner == user]
@@ -140,19 +141,17 @@ def next_job():
     c_jid_match = f"{current_job_id()}:"
     print(c_jid_match)
     with open(expanduser("~/.config/job_queue/completed")) as f:
-        match = False
         for line in f:
             if c_jid_match == line[: len(c_jid_match)]:
-                match = True
                 break
-        if not match:
+        else:
             print("Cannot find job")
             return None, None, None
 
         try:
             job_id, name, hyphen, directory = next(f).split()
             job_id = job_id[:-1]  # strip colon
-        except StopIteration as e:
+        except StopIteration:
             print("At last job")
             return None, None, None
 

@@ -90,7 +90,7 @@ class SubmitJob:
             if extra_options:
                 raise ValueError(f"Invalid option(s) in config file: {extra_options}")
 
-            self.default_options.update(config_defaults)
+            self.default_options |= config_defaults
 
     @staticmethod
     def parse_args(default_options):
@@ -179,10 +179,10 @@ Default Options (as configured by .config/job_queue/config)
 
         extra_options = set(options) - set(self.default_options)
         if extra_options:
-            raise Exception(f"Unsupported options passed to SubmitJob: {extra_options}")
+            raise ValueError(f"Unsupported options passed to SubmitJob: {extra_options}")
 
         my_options = self.default_options
-        my_options.update(options)
+        my_options |= options
 
         # Convert options from strings to the correct type
         for option, value in my_options.items():
@@ -201,7 +201,7 @@ Default Options (as configured by .config/job_queue/config)
 
         self.check_options(my_options)
 
-        self.__dict__.update(my_options)
+        self.__dict__ |= my_options
 
         self.grid_engine_options = {}
         if self.email and self.email != "False":
@@ -272,9 +272,9 @@ Default Options (as configured by .config/job_queue/config)
                 if not os.path.isfile(f"{i}/{self.input}"):
                     print(f"{i}/{self.input}")
                     print(os.getcwd())
-                    raise Exception(f"Unable to find job_array input file, {i}.")
+                    raise ValueError(f"Unable to find job_array input file, {i}.")
         elif not os.path.exists(self.input):
-            raise Exception("Unable to find input file")
+            raise ValueError("Unable to find input file")
         self.input_root = ".".join(self.input.split(".")[:-1])
 
     def select_output(self):
@@ -297,7 +297,7 @@ Default Options (as configured by .config/job_queue/config)
             try:
                 path = self.cwd[-self.name_length :]
                 self.name = path[path.index("/") + 1 :]
-            except (ValueError, IndexError) as e:
+            except (ValueError, IndexError):
                 dirs = self.cwd.split("/")
                 self.name = dirs[-1]
 
@@ -322,7 +322,7 @@ Default Options (as configured by .config/job_queue/config)
             self.memory = math.ceil(core_memory * self.nprocs)
 
         if self.nprocs % self.nodes:
-            raise Exception(f"Cannot divide {self.nprocs} processes evenly by {self.nodes} nodes.")
+            raise ValueError(f"Cannot divide {self.nprocs} processes evenly by {self.nodes} nodes.")
         self.ppn = int(self.nprocs / self.nodes)
 
     def select_important_files(self):
