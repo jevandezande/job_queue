@@ -24,12 +24,11 @@ parser.add_argument("-a", "--all", help="Print all jobs.", action="store_true", 
 parser.add_argument(
     "-u",
     "--user",
-    help="Output only the jobs of the current user.",
-    action="store_true",
+    const=True,
     default=False,
-)
-parser.add_argument(
-    "-p", "--person", help="Output only the specified persons jobs", action="store", default=False
+    type=str,
+    nargs="?",
+    help="Output only the jobs of the specified user (or current if none specified).",
 )
 parser.add_argument(
     "-w", "--watch", help="Update when jobs change.", action="store_true", default=False
@@ -38,9 +37,8 @@ parser.add_argument(
 args = parser.parse_args()
 
 queues = Queues()
-person = args.person if args.person else args.user
 number = float("inf") if args.all else args.number
-print(queues.print(numjobs=number, person=person))
+print(queues.print(numjobs=number, person=args.user))
 
 if args.watch:
     for i in range(3600):
@@ -49,4 +47,4 @@ if args.watch:
         new_queues = Queues()
         if queues != new_queues:
             queues = new_queues
-            print(queues.print(numjobs=number, person=person))
+            print(queues.print(numjobs=number, person=args.user))
